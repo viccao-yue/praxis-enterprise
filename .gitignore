@@ -1,0 +1,16 @@
+server/target/
+server/data/*
+!server/data/.gitkeep
+web/node_modules/
+web/dist/
+.env
+.env.*
+!.env.example
+.DS_Store
+.local/
+
+# Local acceptance state, credentials, generated packages and captures
+.test-runtime/
+.artifacts/
+**/__pycache__/
+*.py[cod]
