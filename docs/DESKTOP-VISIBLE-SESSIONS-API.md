@@ -6,7 +6,7 @@
 
 ## 鉴权与数据归属
 
-`POST`、`GET`、`DELETE /api/member/visible-sessions` 都要求原始请求中显式的 `Authorization: Bearer <member-token>`。仅 Cookie、仅 `X-WorkDSH-Service-Key` 或模型内部 Key 不授权本接口。每次重新检查登录未过期、成员有效及已完成首次改密。成员只能操作自身正文会话，管理员读取仍走现有只读管理 API。
+`POST`、`GET`、`DELETE /api/member/visible-sessions` 都要求原始请求中显式的 `Authorization: Bearer <member-token>`。仅 Cookie、仅 `X-开物Praxis-Service-Key` 或模型内部 Key 不授权本接口。每次重新检查登录未过期、成员有效及已完成首次改密。成员只能操作自身正文会话，管理员读取仍走现有只读管理 API。
 
 归属键为服务器推导的组织/成员加客户端 `sessionId`。首次提交固定该会话的 `deviceId`，同一成员的其他逻辑设备不能接管。另一成员可以使用相同本地 ID，得到独立的服务器会话。设备 ID 是逻辑写者绑定，不是硬件证明；持有同一成员有效 Bearer 的客户端仍可自报相同逻辑设备 ID。
 
