@@ -5,22 +5,28 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
+import com.kaiwu.praxis.admin.license.LicenseService;
 @RestController @RequestMapping("/api/admin/sessions")
 public class AdminSessionsController {
  public record Summary(String memberId,String memberName,String sessionId,long createdAt,long eventCount){}
  public record Message(long seq,long time,String role,JsonNode content){}
  public record Detail(List<Message> messages,long nextOffset,boolean hasMore){}
  private final JdbcTemplate db;private final AuthService auth;private final ObjectMapper json;private final MemberController members;
- public AdminSessionsController(JdbcTemplate db,AuthService auth,ObjectMapper json,MemberController members){this.db=db;this.auth=auth;this.json=json;this.members=members;}
+ private final LicenseService licenses;
+ public AdminSessionsController(JdbcTemplate db,AuthService auth,ObjectMapper json,MemberController members,LicenseService licenses){this.db=db;this.auth=auth;this.json=json;this.members=members;this.licenses=licenses;}
  private AuthService.Actor admin(String token){var a=auth.actor(token);auth.requireReady(a);auth.requireAdmin(a);return a;}
  private JsonNode decode(String value){try{return json.readTree(value);}catch(Exception e){throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,"Malformed session storage");}}
  @GetMapping public List<Summary> list(@RequestHeader(value="Authorization",required=false) String token,@RequestParam(defaultValue="0") int offset,@RequestParam(defaultValue="50") int limit){
-  var a=admin(token);if(offset<0||limit<1||limit>100)throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+  var a=admin(token);
+  if(!a.consoleOperator()) licenses.requireFeature(a.organizationId(), LicenseService.Feature.SESSION_VIEW);
+  if(offset<0||limit<1||limit>100)throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
   String sql="select s.member_id,m.display_name,s.server_session_id,s.created_at,s.record_count from member_desktop_body_sessions s join members m on m.id=s.member_id and m.organization_id=s.organization_id where s.organization_id=? and s.deleted_at=0 order by s.created_at desc,s.server_session_id limit ? offset ?";
   return db.query(sql,(rs,n)->new Summary(rs.getString(1),rs.getString(2),rs.getString(3),rs.getLong(4),rs.getLong(5)),a.organizationId(),limit,offset);
  }
  @GetMapping("/{memberId}/{sessionId}") public Detail detail(@RequestHeader(value="Authorization",required=false) String token,@PathVariable String memberId,@PathVariable String sessionId,@RequestParam(defaultValue="0") long offset){
-  var a=admin(token);if(offset<0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+  var a=admin(token);
+  if(!a.consoleOperator()) licenses.requireFeature(a.organizationId(), LicenseService.Feature.SESSION_VIEW);
+  if(offset<0)throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
   if(!sessionId.startsWith("desktop-body:"))throw new ResponseStatusException(HttpStatus.NOT_FOUND);
   Long count;List<JsonNode> events;
   {

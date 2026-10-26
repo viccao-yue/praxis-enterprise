@@ -2,6 +2,9 @@ server:
   address: ${BIND_ADDRESS:127.0.0.1}
   port: ${PORT:18890}
 spring:
+  mvc:
+    problemdetails:
+      enabled: true
   servlet:
     multipart:
       max-file-size: 12MB
@@ -20,6 +23,8 @@ workdsh:
     admin-email: ${WORKDSH_BOOTSTRAP_ADMIN_EMAIL:}
     admin-password: ${WORKDSH_BOOTSTRAP_ADMIN_PASSWORD:}
     organization-name: ${WORKDSH_ORGANIZATION_NAME:开物Praxis}
+  license:
+    enforced: ${WORKDSH_LICENSE_ENFORCED:true}
 
 
   secrets:

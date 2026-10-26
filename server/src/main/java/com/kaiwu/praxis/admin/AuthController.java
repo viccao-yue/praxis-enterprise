@@ -30,7 +30,7 @@ public class AuthController {
     }
     @PostMapping("/browser-login")
     public AuthService.Actor browserLogin(@Valid @RequestBody Credentials credentials, HttpServletResponse response) {
-        var login = auth.login(credentials.email(), credentials.password());
+        var login = auth.login(credentials.email(), credentials.password(), "console");
         response.addHeader("Set-Cookie", cookie(login.token(), 43_200));
         return login.member();
     }

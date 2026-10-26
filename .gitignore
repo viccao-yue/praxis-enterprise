@@ -8,6 +8,7 @@ web/dist/
 !.env.example
 .DS_Store
 .local/
+license-private.pem
 
 # Local acceptance state, credentials, generated packages and captures
 .test-runtime/

@@ -15,17 +15,21 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.kaiwu.praxis.admin.license.LicenseService;
+
 @RestController
 @RequestMapping("/api/collaboration")
 public class CollaborationController {
     private final JdbcTemplate db;
     private final AuthService auth;
     private final DatabaseDialect dialect;
+    private final LicenseService licenses;
 
-    public CollaborationController(JdbcTemplate db, AuthService auth, DatabaseDialect dialect) {
+    public CollaborationController(JdbcTemplate db, AuthService auth, DatabaseDialect dialect, LicenseService licenses) {
         this.db = db;
         this.auth = auth;
         this.dialect = dialect;
+        this.licenses = licenses;
     }
 
     public record Colleague(String id, String displayName, String email) {}
@@ -134,6 +138,7 @@ public class CollaborationController {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "Request key already used");
             return one(previous.get(0)[0], actor);
         }
+        licenses.requireFeature(actor.organizationId(), LicenseService.Feature.SHARING);
         String id = UUID.randomUUID().toString();
         try {
             db.update("insert into collaboration_handoffs(id,organization_id,sender_id,recipient_id,request_key,summary,status,created_at) values (?,?,?,?,?,?,?,?)",

@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.kaiwu.praxis.admin.license.LicenseService;
 
 /** Immutable explicitly selected material snapshot, accessible only to handoff parties. */
 @RestController
@@ -20,8 +21,10 @@ public class CollaborationMaterialsController {
     private final CollaborationController collaboration;
     private final JdbcTemplate db;
     private final ObjectMapper json;
-    public CollaborationMaterialsController(CollaborationController collaboration, JdbcTemplate db, ObjectMapper json) {
-        this.collaboration=collaboration; this.db=db; this.json=json;
+    private final AuthService auth;
+    private final LicenseService licenses;
+    public CollaborationMaterialsController(CollaborationController collaboration, JdbcTemplate db, ObjectMapper json, AuthService auth, LicenseService licenses) {
+        this.collaboration=collaboration; this.db=db; this.json=json; this.auth=auth; this.licenses=licenses;
     }
     public record FileItem(@NotBlank @Size(max=200) String name, @NotBlank String sha256,
                            @NotBlank @Size(max=7000000) String data) {}
@@ -46,12 +49,16 @@ public class CollaborationMaterialsController {
             if(!HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes)).equals(file.sha256()))
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"File checksum mismatch");
         }
+        var actor=auth.actor(authorization);
         var handoff=collaboration.send(authorization,new CollaborationController.NewHandoff(input.recipientId(),input.summary(),input.requestKey()));
         String payload=json.writeValueAsString(new Materials(input.context(),input.files()));
         var existing=db.query("select payload from collaboration_materials where handoff_id=?",(rs,n)->rs.getString(1),handoff.id());
         if(!existing.isEmpty()) {
             if(!existing.get(0).equals(payload))throw new ResponseStatusException(HttpStatus.CONFLICT,"Material retry differs from original");
-        } else db.update("insert into collaboration_materials(handoff_id,payload) values (?,?)",handoff.id(),payload);
+        } else {
+            licenses.requireFeature(actor.organizationId(), LicenseService.Feature.SHARING);
+            db.update("insert into collaboration_materials(handoff_id,payload) values (?,?)",handoff.id(),payload);
+        }
         return handoff;
     }
     @GetMapping("/{id}")

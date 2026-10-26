@@ -17,13 +17,20 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import com.kaiwu.praxis.admin.license.LicenseService;
+
 @RestController
 @RequestMapping("/api")
 public class MemberController {
     private final JdbcTemplate db;
     private final AuthService auth;
+    private final LicenseService licenses;
 
-    public MemberController(JdbcTemplate db, AuthService auth) { this.db = db; this.auth = auth; }
+    public MemberController(JdbcTemplate db, AuthService auth, LicenseService licenses) {
+        this.db = db;
+        this.auth = auth;
+        this.licenses = licenses;
+    }
 
     public record Member(String id, String email, String displayName, String role, boolean active,
                          boolean mustChangePassword, int revision) {}
@@ -61,6 +68,7 @@ public class MemberController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid role");
         }
         if (request.role().equals("ADMIN") && !actor.role().equals("OWNER")) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Only owner may appoint admins");
+        if (!actor.consoleOperator()) licenses.requireSeat(actor.organizationId());
         String id = UUID.randomUUID().toString();
         String temporaryPassword = auth.newTemporaryPassword();
         try {
@@ -70,6 +78,7 @@ public class MemberController {
         } catch (DuplicateKeyException e) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Member email already exists");
         }
+        if (!actor.consoleOperator()) licenses.confirmSeats(actor.organizationId());
         audit(actor, "member.created", id);
         return new CreatedMember(new Member(id, request.email().trim().toLowerCase(Locale.ROOT),
                 request.displayName().trim(), request.role(), true, true, 1), temporaryPassword);
@@ -92,12 +101,14 @@ public class MemberController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid role");
         }
         boolean active = change.active() == null ? before.active() : change.active();
+        if (!before.active() && active && !actor.consoleOperator()) licenses.requireSeat(actor.organizationId());
         if (id.equals(actor.id()) && !active) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot disable yourself");
         }
         int changed = db.update("update members set role=?,active=?,revision=revision+1 where id=? and organization_id=? and revision=?",
                 role, active, id, actor.organizationId(), change.expectedRevision());
         if (changed != 1) throw new ResponseStatusException(HttpStatus.CONFLICT, "Member changed; refresh first");
+        if (!before.active() && active && !actor.consoleOperator()) licenses.confirmSeats(actor.organizationId());
         if (!active) {
             db.update("delete from auth_sessions where member_id=?", id);
         }
@@ -131,7 +142,7 @@ public class MemberController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Member not found"));
     }
 
-    void audit(AuthService.Actor actor, String action, String targetId) {
+    public void audit(AuthService.Actor actor, String action, String targetId) {
         db.update("insert into audit_events(id,organization_id,actor_id,action,target_id,occurred_at) values (?,?,?,?,?,?)",
                 UUID.randomUUID().toString(), actor.organizationId(), actor.id(), action, targetId,
                 Timestamp.from(Instant.now()));

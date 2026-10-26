@@ -37,7 +37,47 @@ async function login(){busy.value=true;try{await run(async()=>{me.value=await po
 async function logout(){try{await post('/auth/logout',{});me.value=null;members.value=[];selected.value=[];sessions.value=[];sessionDetail.value=null;sessionMessages.value=[]}catch(e){Message.error(e.message)}}
 async function changePassword(){try{await run(()=>post('/auth/change-password',passwordForm));me.value=null;Object.assign(passwordForm,{currentPassword:'',newPassword:''});Message.success('密码已设置，请重新登录')}catch{}}
 async function refresh(){try{await run(load);if(page.value==='models')await loadModels();if(page.value==='sessions')await loadSessions()}catch{}}
-function navigate(key){page.value=key;selected.value=[];sessionDetail.value=null;if(key==='models')loadModels();if(key==='sessions')loadSessions()}
+const license = ref(null)
+const licenseStatusText = computed(() => {
+  const item = license.value
+  if (!item) return '—'
+  const until = item.notAfter ? new Date(item.notAfter).toLocaleDateString() : ''
+  if (item.status === 'pending') {
+    const start = item.notBefore ? new Date(item.notBefore).toLocaleDateString() : ''
+    return start ? `将于${start}生效` : '尚未生效'
+  }
+  if (item.status === 'expiring') return `将于${until}到期`
+  if (item.status === 'active') return `有效至${until}`
+  return { none: '未授权', invalid: '授权无效', expired: '已过期' }[item.status] || item.status
+})
+function featureText(name) {
+  return license.value?.features?.[name] ? '开' : '关'
+}
+async function loadLicense() {
+  license.value = await run(() => api('/admin/license'))
+}
+async function copyInstallation() {
+  if (!license.value?.installationId) return
+  await navigator.clipboard.writeText(license.value.installationId)
+  Message.success('已复制安装标识')
+}
+async function uploadLicense(event) {
+  const file = event.target.files?.[0]
+  event.target.value = ''
+  if (!file) return
+  let body
+  try {
+    body = JSON.parse(await file.text())
+  } catch {
+    Message.error('许可证格式无效')
+    return
+  }
+  try {
+    license.value = await run(() => api('/admin/license', { method: 'PUT', body: JSON.stringify(body) }))
+    Message.success('企业授权已更新')
+  } catch {}
+}
+function navigate(key){page.value=key;selected.value=[];sessionDetail.value=null;if(key==='models')loadModels();if(key==='sessions')loadSessions();if(key==='settings')loadLicense()}
 async function loadSessions(){try{sessions.value=await run(()=>api('/admin/sessions?offset='+sessionOffset.value))}catch{}}
 async function viewSession(record,more=false){try{const result=await run(()=>api('/admin/sessions/'+encodeURIComponent(record.memberId)+'/'+encodeURIComponent(record.sessionId)+'?offset='+(more?sessionNext.value:0)));sessionDetail.value=record;sessionMessages.value=more?[...sessionMessages.value,...result.messages]:result.messages;sessionNext.value=result.nextOffset;sessionMore.value=result.hasMore}catch{}}
 function messageText(content){if(typeof content==='string')return content;if(Array.isArray(content))return content.map(part=>part.type==='text'?part.text:part.type==='image'?'[图片]':part.type==='file'?'[附件]':'').filter(Boolean).join('\n');return ''}
@@ -52,7 +92,7 @@ async function saveDepartment(){try{await run(async()=>{if(deptEditing.value)awa
 function deleteDepartment(){if(!currentDepartment.value)return;const d=currentDepartment.value;Modal.confirm({title:`删除部门“${d.name}”`,content:'只有没有成员和子部门的空部门可以删除。',onOk:async()=>{await run(()=>api(`/admin/organization/departments/${d.id}`,{method:'DELETE'}));department.value='all';await load()}})}
 async function savePolicy(){try{await run(async()=>{Object.assign(policy,await api('/admin/organization/policy',{method:'PUT',body:JSON.stringify(policy)}));Message.success('权限策略已保存，DSH 同事目录与新分享即时生效');await load()})}catch{}}
 const permissionRows=[{action:'维护部门与普通成员',owner:'允许',admin:'允许',member:'不允许'},{action:'任命、变更管理员',owner:'允许',admin:'不允许',member:'不允许'},{action:'修改通讯录与分享策略',owner:'允许',admin:'不允许',member:'不允许'},{action:'查看操作记录',owner:'允许',admin:'允许',member:'不允许'},{action:'查找同事与分享资料',owner:'按组织策略',admin:'按组织策略',member:'按组织策略'},{action:'只读查阅本组织会话（记入操作记录）',owner:'允许',admin:'允许',member:'不允许'},{action:'读取协作分享内容',owner:'仅参与双方',admin:'仅参与双方',member:'仅参与双方'}]
-const auditLabel=x=>({'session.content.viewed':'查看会话正文','member.created':'添加成员','member.updated':'更新成员权限','member.disabled':'停用成员','member.profile.updated':'更新成员资料','department.created':'创建部门','department.updated':'编辑部门','department.deleted':'删除部门','organization.policy.updated':'更新组织策略','runtime.credential.revoked':'撤销实例凭据'})[x]||x
+const auditLabel=x=>({'session.content.viewed':'查看会话正文','member.created':'添加成员','member.updated':'更新成员权限','member.disabled':'停用成员','member.profile.updated':'更新成员资料','department.created':'创建部门','department.updated':'编辑部门','department.deleted':'删除部门','organization.policy.updated':'更新组织策略','runtime.credential.revoked':'撤销实例凭据','license.uploaded':'更新企业授权'})[x]||x
 onMounted(async()=>{try{me.value=await api('/auth/me');await load()}catch{me.value=null}})
 </script>
 
@@ -92,7 +132,18 @@ onMounted(async()=>{try{me.value=await api('/auth/me');await load()}catch{me.val
 <div class="model-actions"><a-button type="primary" html-type="submit" :loading="saving">保存配置</a-button></div>
 </form></section><section v-else-if="page==='sessions'" class="content-panel"><h2>会话查阅</h2><p class="muted">管理员可只读查看本组织成员的聊天正文，查看会记入操作记录。</p><a-table :data="sessions" :pagination="false" :bordered="false"><template #columns><a-table-column title="成员" data-index="memberName"/><a-table-column title="会话 ID" data-index="sessionId" ellipsis/><a-table-column title="创建时间"><template #cell="{record}">{{new Date(record.createdAt).toLocaleString()}}</template></a-table-column><a-table-column title="操作"><template #cell="{record}"><a-button type="text" @click="viewSession(record)">查看正文</a-button></template></a-table-column></template></a-table><a-space><a-button :disabled="sessionOffset===0" @click="sessionOffset-=50;loadSessions()">上一页</a-button><a-button :disabled="sessions.length&lt;50" @click="sessionOffset+=50;loadSessions()">下一页</a-button></a-space></section>
 <section v-else-if="page==='audit'" class="content-panel"><h2>操作记录</h2><p class="muted">记录组织管理与协作操作，不展示成员私有会话正文。最近 100 条。</p><a-table :data="audits" row-key="id" :bordered="false"><template #columns><a-table-column title="操作时间" :width="170"><template #cell="{record}">{{new Date(record.occurredAt).toLocaleString()}}</template></a-table-column><a-table-column title="操作人" :width="130"><template #cell="{record}">{{members.find(m=>m.id===record.actorId)?.displayName||'已移除成员'}}</template></a-table-column><a-table-column title="操作"><template #cell="{record}">{{auditLabel(record.action)}}</template></a-table-column><a-table-column title="对象 ID" data-index="targetId" ellipsis/></template></a-table></section>
-<section v-else class="content-panel org-profile"><div class="org-profile-head"><div><p class="org-kicker">企业名称</p><h2>{{organization.name}}</h2></div><span class="org-role">{{roleLabel(me.role)}}</span></div><dl class="org-facts"><div><dt>当前账号</dt><dd>{{me.email}}</dd></div><div><dt>登录方式</dt><dd>邮箱 / 管理员设置的登录用户名</dd></div><div><dt>运行端</dt><dd>通过外置企业身份与协作插件接入 DSH</dd></div></dl></section>
+<section v-else class="content-panel org-profile"><div class="org-profile-head"><div><p class="org-kicker">企业名称</p><h2>{{organization.name}}</h2></div><span class="org-role">{{roleLabel(me.role)}}</span></div><dl class="org-facts"><div><dt>当前账号</dt><dd>{{me.email}}</dd></div><div><dt>登录方式</dt><dd>邮箱 / 管理员设置的登录用户名</dd></div><div><dt>运行端</dt><dd>通过外置企业身份与协作插件接入 DSH</dd></div><div><dt>安装标识</dt><dd><code>{{ license?.installationId || '—' }}</code><a-button type="text" size="small" @click="copyInstallation">复制</a-button></dd></div>
+<div><dt>授权状态</dt><dd>{{ licenseStatusText }}</dd></div>
+<div><dt>授权客户</dt><dd>{{ license?.customer || '—' }}</dd></div>
+<div><dt>席位</dt><dd>{{ license ? license.seatsUsed + ' / ' + (license.seats ?? '—') : '—' }}</dd></div>
+<div><dt>同事分享</dt><dd>{{ featureText('sharing') }}</dd></div>
+<div><dt>模型转发</dt><dd>{{ featureText('modelGateway') }}</dd></div>
+<div><dt>会话查阅</dt><dd>{{ featureText('sessionView') }}</dd></div>
+</dl>
+<div v-if="owner" class="license-upload">
+  <label>上传许可证<input type="file" accept="application/json,.json" @change="uploadLicense"/></label>
+</div>
+</section>
 </main></div>
 <a-drawer :visible="!!sessionDetail" title="会话正文" :width="720" :footer="false" @cancel="sessionDetail=null;sessionMessages=[]"><p class="muted">{{sessionDetail?.memberName}} · 只读查看</p><a-empty v-if="!sessionMessages.length" description="当前记录没有聊天正文"/><article v-for="message in sessionMessages" :key="message.seq" style="margin-bottom:24px"><strong>{{message.role==='user'?'用户':'助手'}}</strong><small class="muted"> · {{new Date(message.time).toLocaleString()}}</small><pre style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit">{{messageText(message.content)||'[非文本内容]'}}</pre></article><a-button v-if="sessionMore" @click="viewSession(sessionDetail,true)">加载更多</a-button></a-drawer>
 <a-drawer v-model:visible="drawer" :title="editing?'编辑成员':'添加成员'" :width="520" :footer="true" :unmount-on-close="true"><div class="drawer-section-title">基本信息</div><a-form :model="form" layout="vertical"><a-form-item label="姓名" required><a-input v-model="form.displayName" :max-length="64" placeholder="输入成员姓名"/></a-form-item><a-form-item label="主部门"><a-select v-model="form.departmentId" :options="deptOptions" allow-clear placeholder="选择主部门"/></a-form-item><a-form-item label="邮箱" required><a-input v-model="form.email" :disabled="!!editing" placeholder="name@company.com"/></a-form-item><a-form-item label="登录用户名" help="由管理员设置，2–64 位字母、数字、点、下划线或短横线"><a-input v-model="form.username" placeholder="例如 zhangsan"/></a-form-item><div class="drawer-section-title">组织与岗位</div><a-form-item label="组织角色"><a-select v-model="form.role" :disabled="!owner"><a-option value="MEMBER">成员</a-option><a-option value="ADMIN">管理员</a-option></a-select></a-form-item><a-form-item label="工号"><a-input v-model="form.employeeNumber" :max-length="64"/></a-form-item><a-form-item label="职位"><a-input v-model="form.jobTitle" :max-length="64"/></a-form-item></a-form><a-alert v-if="!editing">直接添加后生成一次性临时密码，成员首次登录须修改。当前不发送邀请邮件。</a-alert><template #footer><a-space><a-button @click="drawer=false">取消</a-button><a-button type="primary" :loading="saving" @click="saveMember">保存</a-button></a-space></template></a-drawer>

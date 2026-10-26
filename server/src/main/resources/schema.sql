@@ -16,7 +16,8 @@ create table if not exists members (
 create table if not exists auth_sessions (
   token_hash varchar(64) primary key,
   member_id varchar(36) not null references members(id),
-  expires_at timestamp not null
+  expires_at timestamp not null,
+  channel varchar(16) not null default 'desktop'
 );
 create table if not exists audit_events (
   id varchar(36) primary key,
@@ -165,4 +166,18 @@ create table if not exists member_desktop_body_receipts (
  primary key (organization_id,member_id,client_session_id,request_id),
  unique (organization_id,member_id,client_session_id,revision),
  foreign key (organization_id,member_id,client_session_id) references member_desktop_body_sessions(organization_id,member_id,client_session_id)
+);
+create table if not exists deployment_licenses (
+  organization_id varchar(36) primary key references organizations(id),
+  installation_id varchar(36) not null unique,
+  payload text,
+  signature varchar(128),
+  customer_name varchar(80),
+  not_before timestamp,
+  not_after timestamp,
+  seats integer,
+  sharing boolean,
+  model_gateway boolean,
+  session_view boolean,
+  uploaded_at timestamp
 );

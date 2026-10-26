@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>开物管理端组件架构</title>
+<style>
+  body { margin: 0; background: #f6f7f9; color: #1f2328; font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif; }
+  header { max-width: 1200px; margin: 0 auto; padding: 28px 24px 8px; }
+  h1 { margin: 0 0 8px; font-size: 22px; font-weight: 650; }
+  p.lead { margin: 0; max-width: 860px; color: #4b5563; font-size: 14px; line-height: 1.7; }
+  .frame { max-width: 1200px; margin: 16px auto 28px; background: #fff; border: 1px solid #e6e8ec; border-radius: 12px; overflow: auto; }
+  svg { display: block; min-width: 1200px; }
+  footer { max-width: 1200px; margin: 0 auto 36px; padding: 0 24px; color: #6b7280; font-size: 12px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<header>
+  <h1>开物管理端组件架构</h1>
+  <p class="lead">当前已经落地的管理端。它负责账号、组织权限、同事分享的数据、会话正文只读、公司模型转发和许可证。个人端上的 Agent 与工具仍在员工电脑执行，不进入这个进程。</p>
+</header>
+<div class="frame">
+<svg viewBox="0 0 1200 820" width="1200" height="820" role="img" aria-label="开物管理端组件架构图">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 1.2 L 9 5 L 0 8.8 Z" fill="#5c6b7a"/>
+    </marker>
+  </defs>
+
+  <rect x="16" y="16" width="250" height="788" rx="12" fill="#eef1f4"/>
+  <text x="32" y="44" font-size="13" font-weight="650" fill="#374151">调用方</text>
+
+  <rect x="36" y="64" width="210" height="120" rx="8" fill="#fff" stroke="#d5dae1"/>
+  <text x="52" y="94" font-size="14" font-weight="650">管理员浏览器</text>
+  <text x="52" y="118" font-size="12" fill="#4b5563">成员、权限、审计</text>
+  <text x="52" y="138" font-size="12" fill="#4b5563">模型配置与许可证</text>
+  <text x="52" y="158" font-size="12" fill="#4b5563">会话正文只读</text>
+
+  <rect x="36" y="248" width="210" height="156" rx="8" fill="#fff" stroke="#d5dae1"/>
+  <text x="52" y="278" font-size="14" font-weight="650">开物个人端</text>
+  <text x="52" y="302" font-size="12" fill="#4b5563">员工电脑上的桌面应用</text>
+  <text x="52" y="326" font-size="12" fill="#4b5563">企业账号登录</text>
+  <text x="52" y="346" font-size="12" fill="#4b5563">同事分享与正文同步</text>
+  <text x="52" y="366" font-size="12" fill="#4b5563">用内部 Key 调用模型</text>
+  <text x="52" y="386" font-size="12" fill="#6b7280">Agent 在本机执行</text>
+
+  <rect x="36" y="430" width="210" height="120" rx="8" fill="#fff" stroke="#d5dae1"/>
+  <text x="52" y="460" font-size="14" font-weight="650">签发电脑</text>
+  <text x="52" y="484" font-size="12" fill="#4b5563">私钥只留在这里</text>
+  <text x="52" y="504" font-size="12" fill="#4b5563">按安装标识签发 JSON</text>
+  <text x="52" y="524" font-size="12" fill="#6b7280">不进入管理端进程</text>
+
+  <rect x="300" y="16" width="560" height="788" rx="12" fill="#f3f5f8"/>
+  <text x="316" y="44" font-size="13" font-weight="650" fill="#374151">管理端 · 同一台机器上的两个进程</text>
+
+  <rect x="320" y="64" width="520" height="72" rx="8" fill="#fff" stroke="#d5dae1"/>
+  <text x="336" y="92" font-size="14" font-weight="650">管理 Web</text>
+  <text x="336" y="116" font-size="12" fill="#4b5563">Vue 3 / Arco · 127.0.0.1:18891 · 将 /api 转到 Java</text>
+
+  <rect x="320" y="168" width="520" height="600" rx="8" fill="#fff" stroke="#c5ced8"/>
+  <text x="336" y="196" font-size="14" font-weight="650">企业 API</text>
+  <text x="408" y="196" font-size="12" fill="#4b5563">Spring Boot · 127.0.0.1:18890</text>
+
+  <rect x="336" y="216" width="240" height="92" rx="8" fill="#f8fafc" stroke="#d5dae1"/>
+  <text x="352" y="244" font-size="13" font-weight="650">认证与会话</text>
+  <text x="352" y="268" font-size="12" fill="#4b5563">登录、改密</text>
+  <text x="352" y="288" font-size="12" fill="#4b5563">Cookie 或 12 小时 Bearer</text>
+
+  <rect x="588" y="216" width="236" height="92" rx="8" fill="#f8fafc" stroke="#d5dae1"/>
+  <text x="604" y="244" font-size="13" font-weight="650">成员与组织</text>
+  <text x="604" y="268" font-size="12" fill="#4b5563">部门、角色、通讯录</text>
+  <text x="604" y="288" font-size="12" fill="#4b5563">启用人数受席位限制</text>
+
+  <rect x="336" y="324" width="240" height="92" rx="8" fill="#f8fafc" stroke="#d5dae1"/>
+  <text x="352" y="352" font-size="13" font-weight="650">同事协作</text>
+  <text x="352" y="376" font-size="12" fill="#4b5563">分享、材料、回复、通知</text>
+  <text x="352" y="396" font-size="12" fill="#4b5563">只对参与双方可见</text>
+
+  <rect x="588" y="324" width="236" height="92" rx="8" fill="#f8fafc" stroke="#d5dae1"/>
+  <text x="604" y="352" font-size="13" font-weight="650">会话查阅</text>
+  <text x="604" y="376" font-size="12" fill="#4b5563">只读用户与助手正文</text>
+  <text x="604" y="396" font-size="12" fill="#4b5563">查看本身写入审计</text>
+
+  <rect x="336" y="432" width="240" height="92" rx="8" fill="#f8fafc" stroke="#d5dae1"/>
+  <text x="352" y="460" font-size="13" font-weight="650">许可证</text>
+  <text x="352" y="484" font-size="12" fill="#4b5563">公钥验签，核对安装标识</text>
+  <text x="352" y="504" font-size="12" fill="#4b5563">席位与三项功能开关</text>
+
+  <rect x="588" y="432" width="236" height="92" rx="8" fill="#f8fafc" stroke="#d5dae1"/>
+  <text x="604" y="460" font-size="13" font-weight="650">模型网关</text>
+  <text x="604" y="484" font-size="12" fill="#4b5563">Spring AI 转发上游</text>
+  <text x="604" y="504" font-size="12" fill="#4b5563">供应商密钥只在服务器</text>
+
+  <rect x="336" y="540" width="488" height="78" rx="8" fill="#f8fafc" stroke="#d5dae1"/>
+  <text x="352" y="568" font-size="13" font-weight="650">审计</text>
+  <text x="352" y="592" font-size="12" fill="#4b5563">成员变更、分享、查看正文、上传许可证。可在操作记录中查看。</text>
+
+  <text x="336" y="650" font-size="12" fill="#6b7280">未授权或过期时，只有所有者能登录并上传新许可证。</text>
+  <text x="336" y="672" font-size="12" fill="#6b7280">内部模型 Key 不能登录管理端。工具、思考和未分享文件不进入会话查阅。</text>
+  <text x="336" y="694" font-size="12" fill="#6b7280">管理 Web 与企业 API 分开进程，浏览器只访问 Web。</text>
+
+  <rect x="894" y="16" width="290" height="788" rx="12" fill="#eef1f4"/>
+  <text x="910" y="44" font-size="13" font-weight="650" fill="#374151">数据与外部依赖</text>
+
+  <rect x="914" y="64" width="250" height="176" rx="8" fill="#fff" stroke="#d5dae1"/>
+  <text x="930" y="94" font-size="14" font-weight="650">事务库</text>
+  <text x="930" y="118" font-size="12" fill="#4b5563">PostgreSQL 或 MySQL</text>
+  <text x="930" y="138" font-size="12" fill="#4b5563">本地开发可用 H2</text>
+  <text x="930" y="166" font-size="12" fill="#4b5563">成员、组织、协作</text>
+  <text x="930" y="186" font-size="12" fill="#4b5563">会话正文、模型配置</text>
+  <text x="930" y="206" font-size="12" fill="#4b5563">许可证与审计</text>
+  <text x="930" y="226" font-size="12" fill="#6b7280">企业库需先做迁移</text>
+
+  <rect x="914" y="268" width="250" height="140" rx="8" fill="#fff" stroke="#d5dae1"/>
+  <text x="930" y="298" font-size="14" font-weight="650">上游模型</text>
+  <text x="930" y="322" font-size="12" fill="#4b5563">OpenAI Chat Completions</text>
+  <text x="930" y="342" font-size="12" fill="#4b5563">或 Anthropic Messages</text>
+  <text x="930" y="370" font-size="12" fill="#4b5563">地址与供应商 Key</text>
+  <text x="930" y="390" font-size="12" fill="#4b5563">在模型服务页配置</text>
+
+  <rect x="914" y="436" width="250" height="132" rx="8" fill="#fff" stroke="#d5dae1"/>
+  <text x="930" y="466" font-size="14" font-weight="650">验签公钥</text>
+  <text x="930" y="490" font-size="12" fill="#4b5563">随管理端安装包发布</text>
+  <text x="930" y="514" font-size="12" fill="#4b5563">只验证许可证签名</text>
+  <text x="930" y="534" font-size="12" fill="#4b5563">服务器上没有私钥</text>
+  <text x="930" y="554" font-size="12" fill="#6b7280">更换公钥需重新部署</text>
+
+  <path d="M246 124 H320" fill="none" stroke="#5c6b7a" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="258" y="116" font-size="11" fill="#4b5563">页面</text>
+
+  <path d="M580 136 V168" fill="none" stroke="#5c6b7a" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="588" y="158" font-size="11" fill="#4b5563">/api</text>
+
+  <path d="M246 300 H336" fill="none" stroke="#5c6b7a" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="258" y="292" font-size="11" fill="#4b5563">登录</text>
+
+  <path d="M246 360 H336" fill="none" stroke="#5c6b7a" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="252" y="352" font-size="11" fill="#4b5563">Bearer</text>
+
+  <path d="M246 490 H336" fill="none" stroke="#5c6b7a" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="252" y="482" font-size="11" fill="#4b5563">上传文件</text>
+
+  <path d="M840 150 H914" fill="none" stroke="#5c6b7a" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="848" y="142" font-size="11" fill="#4b5563">读写</text>
+
+  <path d="M840 338 H914" fill="none" stroke="#5c6b7a" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="848" y="330" font-size="11" fill="#4b5563">HTTPS</text>
+
+  <path d="M840 500 H914" fill="none" stroke="#5c6b7a" stroke-width="1.4" marker-end="url(#arrow)"/>
+  <text x="848" y="492" font-size="11" fill="#4b5563">验签</text>
+</svg>
+</div>
+<footer>
+  这张图只画当前代码里的管理端。图上的托管运行、身份源、知识库和可观测采集还没有放进这个进程。用浏览器打开本文件即可查看。
+</footer>
+</body>
+</html>
