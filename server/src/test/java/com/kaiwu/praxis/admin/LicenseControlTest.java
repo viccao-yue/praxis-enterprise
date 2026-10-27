@@ -286,10 +286,10 @@ class LicenseControlTest {
         call(get("/api/admin/members").cookie(new Cookie("workdsh-admin-session", console)), 200);
         call(get("/api/admin/sessions").cookie(new Cookie("workdsh-admin-session", console)), 200);
         assertEmployeeSideBlocked(console, LicenseTexts.INVALID);
-        call(post("/api/admin/members").cookie(new Cookie("workdsh-admin-session", console)).header("Origin", "http://127.0.0.1:18891")
+        call(post("/api/admin/members").cookie(new Cookie("workdsh-admin-session", console)).header("Origin", "http://127.0.0.1:11520")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("email", "from-console@example.test", "displayName", "控制台", "role", "MEMBER"))), 201);
-        JsonNode member = call(post("/api/auth/browser-login").header("Origin", "http://127.0.0.1:18891")
+        JsonNode member = call(post("/api/auth/browser-login").header("Origin", "http://127.0.0.1:11520")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("email", "console-member@example.test", "password", PASSWORD))), 403);
         assertEquals(LicenseTexts.INVALID, member.path("detail").asText());
@@ -408,7 +408,7 @@ class LicenseControlTest {
     }
 
     private String browserLogin(String email) throws Exception {
-        var result = mvc.perform(post("/api/auth/browser-login").header("Origin", "http://127.0.0.1:18891")
+        var result = mvc.perform(post("/api/auth/browser-login").header("Origin", "http://127.0.0.1:11520")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json.writeValueAsString(Map.of("email", email, "password", PASSWORD)))).andReturn();
         assertEquals(200, result.getResponse().getStatus(), result.getResponse().getContentAsString());

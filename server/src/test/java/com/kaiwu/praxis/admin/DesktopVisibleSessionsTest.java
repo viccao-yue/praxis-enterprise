@@ -32,7 +32,7 @@ class DesktopVisibleSessionsTest {
  @Test void explicitMemberBearerFreshAuthorizationAndNoSelfReportedIdentity()throws Exception{
   var o=owner();var a=member(o.org(),true);String id=session();var body=snapshot(id,"device-A",1,1);
   call(post("/api/member/visible-sessions").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsBytes(body)).header("X-WorkDSH-Service-Key","desktop-service-fixture-000000000000"),401);
-  call(post("/api/member/visible-sessions").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsBytes(body)).header("Origin","http://127.0.0.1:18891").cookie(new Cookie(BrowserSessionFilter.COOKIE_NAME,a.bearer().substring(7))),401);
+  call(post("/api/member/visible-sessions").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsBytes(body)).header("Origin","http://127.0.0.1:11520").cookie(new Cookie(BrowserSessionFilter.COOKIE_NAME,a.bearer().substring(7))),401);
   var notReady=member(o.org(),false);ingest(notReady,body,403);
   for(String field:new String[]{"organizationId","memberId","owner","header","tool","thinking","files","secrets"}){var spoof=body.deepCopy();spoof.put(field,"client-assertion");ingest(a,spoof,400);}
   assertEquals(0,db.queryForObject("select count(*) from member_desktop_body_sessions where member_id=?",Integer.class,a.id()));

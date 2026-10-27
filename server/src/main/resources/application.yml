@@ -1,7 +1,7 @@
 server:
   # 现场 IP 不确定时默认监听全部网卡；可用 BIND_ADDRESS 收紧（如仅内网网卡）
   address: ${BIND_ADDRESS:0.0.0.0}
-  port: ${PORT:18890}
+  port: ${PORT:11519}
 spring:
   mvc:
     problemdetails:

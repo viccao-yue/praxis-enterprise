@@ -35,7 +35,7 @@ def main() -> int:
         "JDBC_USER=workdsh_app",
         "JDBC_PASSWORD=<set-app-role-password>",
         "BIND_ADDRESS=0.0.0.0",
-        "PORT=18890",
+        "PORT=11519",
         f"WORKDSH_ADMIN_WEB_ORIGIN={args.origin}",
         f"WORKDSH_BOOTSTRAP_ADMIN_EMAIL={args.bootstrap_email}",
         f"WORKDSH_BOOTSTRAP_ADMIN_PASSWORD={password}",
