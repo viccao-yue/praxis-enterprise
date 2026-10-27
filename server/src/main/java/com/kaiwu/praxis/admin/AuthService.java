@@ -51,7 +51,8 @@ public class AuthService {
     ApplicationRunner bootstrap(
             @Value("${workdsh.bootstrap.admin-email:}") String email,
             @Value("${workdsh.bootstrap.admin-password:}") String password,
-            @Value("${workdsh.bootstrap.organization-name:开物Praxis}") String orgName) {
+            @Value("${workdsh.bootstrap.organization-name:开物Praxis}") String orgName,
+            @Value("${workdsh.bootstrap.require-password-change:false}") boolean requirePasswordChange) {
         return args -> {
             try {
                 db.execute("alter table auth_sessions add column channel varchar(16) not null default 'desktop'");
@@ -60,14 +61,15 @@ public class AuthService {
             }
             Long count = db.queryForObject("select count(*) from organizations", Long.class);
             if (count != null && count > 0) return;
-            if (email.isBlank() || password.length() < 12) {
-                throw new IllegalStateException("Set WORKDSH_BOOTSTRAP_ADMIN_EMAIL and a password of at least 12 characters before first start");
+            // Allow current delivery default Sun55kong! (10 chars); keep a modest floor.
+            if (email.isBlank() || password.length() < 8) {
+                throw new IllegalStateException("Set WORKDSH_BOOTSTRAP_ADMIN_EMAIL and WORKDSH_BOOTSTRAP_ADMIN_PASSWORD (at least 8 characters) before first start");
             }
             String orgId = UUID.randomUUID().toString();
             String adminId = UUID.randomUUID().toString();
             db.update("insert into organizations(id,name) values (?,?)", orgId, orgName);
-            db.update("insert into members(id,organization_id,email,display_name,role,password_hash,must_change_password,active,revision) values (?,?,?,?,?,?,false,true,1)",
-                    adminId, orgId, email.trim().toLowerCase(), "管理员", "OWNER", passwords.encode(password));
+            db.update("insert into members(id,organization_id,email,display_name,role,password_hash,must_change_password,active,revision) values (?,?,?,?,?,?,?,true,1)",
+                    adminId, orgId, email.trim().toLowerCase(), "管理员", "OWNER", passwords.encode(password), requirePasswordChange);
             licenses.ensureInstallation(orgId);
         };
     }

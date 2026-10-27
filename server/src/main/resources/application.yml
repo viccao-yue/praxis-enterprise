@@ -1,5 +1,6 @@
 server:
-  address: ${BIND_ADDRESS:127.0.0.1}
+  # 现场 IP 不确定时默认监听全部网卡；可用 BIND_ADDRESS 收紧（如仅内网网卡）
+  address: ${BIND_ADDRESS:0.0.0.0}
   port: ${PORT:18890}
 spring:
   mvc:
@@ -18,15 +19,16 @@ spring:
       mode: always
 workdsh:
   web:
-    origin: ${WORKDSH_ADMIN_WEB_ORIGIN:http://127.0.0.1:18891}
+    # 留空则按请求 Host 自动判定同源（适合现场任意 IP）；前后端分离时再显式设置
+    origin: ${WORKDSH_ADMIN_WEB_ORIGIN:}
   bootstrap:
-    admin-email: ${WORKDSH_BOOTSTRAP_ADMIN_EMAIL:}
-    admin-password: ${WORKDSH_BOOTSTRAP_ADMIN_PASSWORD:}
+    # 本轮交付暂用固定默认口令，并关闭首次强制改密；后续版本应改回环境变量注入 + 强制改密
+    admin-email: ${WORKDSH_BOOTSTRAP_ADMIN_EMAIL:admin}
+    admin-password: ${WORKDSH_BOOTSTRAP_ADMIN_PASSWORD:Sun55kong!}
     organization-name: ${WORKDSH_ORGANIZATION_NAME:开物Praxis}
+    require-password-change: ${WORKDSH_BOOTSTRAP_REQUIRE_PASSWORD_CHANGE:false}
   license:
     enforced: ${WORKDSH_LICENSE_ENFORCED:true}
-
-
   secrets:
     encryption-key: ${WORKDSH_SECRETS_ENCRYPTION_KEY:}
     service-key: ${WORKDSH_SECRETS_SERVICE_KEY:}

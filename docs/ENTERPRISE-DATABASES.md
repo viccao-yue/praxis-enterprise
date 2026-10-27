@@ -2,11 +2,11 @@
 
 企业服务器复用同一Java组织数据库；支持显式MySQL、PostgreSQL或测试SQLite配置。后台组织、成员、协作、授权、KV单元和原生会话日志共享数据库，但每次操作按真实组织/成员授权。数据库连接角色本身不提供成员隔离。个人单机存储不受企业组合影响。
 
-SQLite：`SPRING_PROFILES_ACTIVE=enterprise-sqlite`，默认 `jdbc:sqlite:./data/开物Praxis-enterprise.sqlite`。新开发验收库使用当前schema-sqlite.sql（后台包deploy/sqlite/schema.sql），foreign_keys开启、单JDBC连接。MySQL：`enterprise-mysql`，显式提供JDBC_URL/JDBC_USER/JDBC_PASSWORD；维护账号初始化当前schema-mysql.sql（后台包deploy/mysql/schema.sql），应用禁止自动DDL。PostgreSQL：`enterprise-postgres`，由维护账号执行deploy/postgres/migrations，再授予独立运行角色权限；应用禁止自动DDL，见deploy/postgres/README.md。
+SQLite：`SPRING_PROFILES_ACTIVE=enterprise-sqlite`，默认 `jdbc:sqlite:./data/workdsh-enterprise.sqlite`。新开发验收库使用当前schema-sqlite.sql（后台包deploy/sqlite/schema.sql），foreign_keys开启、单JDBC连接。MySQL：`enterprise-mysql`，显式提供JDBC_URL/JDBC_USER/JDBC_PASSWORD；维护账号初始化当前schema-mysql.sql（后台包deploy/mysql/schema.sql），应用禁止自动DDL。PostgreSQL：`enterprise-postgres`，由维护账号执行deploy/postgres/migrations，再授予独立运行角色权限；应用禁止自动DDL，见deploy/postgres/README.md。
 
 当前开发态只初始化新验收库，不兼容迁移旧测试账号、旧单模型数据、Runtime专属授权或订单。旧库不被自动重置或搬迁；不能把新schema脚本直接用于现有数据库。V006补齐当前多模型配置、内部Key与官方transport签名存储；V007增加独立Desktop可见正文/回执/墓碑表。
 
-member_secrets与member_secret_records按组织/成员/引用或record key隔离；使用AES-256-GCM并绑定归属作为AAD，32字节随机密钥Base64通过开物Praxis_SECRETS_ENCRYPTION_KEY提供。服务间接口还要求开物Praxis_SECRETS_SERVICE_KEY与有效成员Bearer，不接受目标成员ID；key不下发浏览器。记录更新采用CAS，删除保留修订墓碑。
+member_secrets与member_secret_records按组织/成员/引用或record key隔离；使用AES-256-GCM并绑定归属作为AAD，32字节随机密钥Base64通过WORKDSH_SECRETS_ENCRYPTION_KEY提供。服务间接口还要求WORKDSH_SECRETS_SERVICE_KEY与有效成员Bearer，不接受目标成员ID；key不下发浏览器。记录更新采用CAS，删除保留修订墓碑。
 
 桌面原生会话与工作区保存在员工设备。后台只存储账号授权、协作数据、模型配置及已授权同步的可见正文，不承担 Agent 运行存储。
 

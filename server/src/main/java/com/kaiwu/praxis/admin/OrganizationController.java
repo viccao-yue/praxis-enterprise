@@ -22,6 +22,16 @@ public class OrganizationController {
  record Policy(String directoryScope,boolean sharingEnabled,int revision){}
  AuthService.Actor admin(String token){var a=auth.actor(token);auth.requireReady(a);auth.requireAdmin(a);return a;}
  @GetMapping public Map<String,Object> data(@RequestHeader(value="Authorization",required=false) String token){var a=admin(token);return Map.of("name",db.queryForObject("select name from organizations where id=?",String.class,a.organizationId()),"departments",departments(a.organizationId()),"profiles",db.query("select * from member_profiles where organization_id=?",(r,n)->new Profile(r.getString("member_id"),r.getString("department_id"),r.getString("username"),r.getString("employee_number"),r.getString("job_title")),a.organizationId()),"policy",policy(a.organizationId()));}
+ record NameInput(@NotBlank @Size(max=160) String name){}
+ @PatchMapping @Transactional public Map<String,Object> rename(@RequestHeader(value="Authorization",required=false) String t,@Valid @RequestBody NameInput v){
+  var a=admin(t);
+  if(!a.role().equals("OWNER")) throw new ResponseStatusException(HttpStatus.FORBIDDEN,"只有所有者可以修改企业名称");
+  String name=v.name().trim();
+  if(name.isBlank()) throw bad("企业名称不能为空");
+  if(db.update("update organizations set name=? where id=?",name,a.organizationId())!=1) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+  members.audit(a,"organization.renamed",a.organizationId());
+  return Map.of("name",name);
+ }
  List<Department> departments(String org){return db.query("select * from departments where organization_id=? order by name",(r,n)->new Department(r.getString("id"),r.getString("parent_id"),r.getString("name"),r.getInt("revision")),org);}
  void parent(String org,String parent,String self){var all=departments(org);int depth=1;var seen=new HashSet<String>();if(self!=null)seen.add(self);while(parent!=null&&!parent.isBlank()){if(!seen.add(parent))throw bad("部门不能循环引用");final String id=parent;var d=all.stream().filter(x->x.id().equals(id)).findFirst().orElseThrow(()->bad("上级部门不存在"));parent=d.parentId();if(++depth>10)throw bad("部门最多十层");}}
  @PostMapping("/departments") @Transactional public Department create(@RequestHeader(value="Authorization",required=false) String t,@Valid @RequestBody DepartmentInput v){var a=admin(t);parent(a.organizationId(),v.parentId(),null);String id=UUID.randomUUID().toString();db.update("insert into departments(id,organization_id,parent_id,name,revision) values(?,?,?,?,1)",id,a.organizationId(),blank(v.parentId()),v.name().trim());members.audit(a,"department.created",id);return new Department(id,blank(v.parentId()),v.name().trim(),1);}

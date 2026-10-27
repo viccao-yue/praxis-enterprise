@@ -13,9 +13,11 @@ async function saveModels(){Object.keys(revealedKeys).forEach(k=>delete revealed
 const revealedKeys=reactive({});
 async function revealKey(provider){const id=provider?.id||'__internal';if(revealedKeys[id]){delete revealedKeys[id];return;}try{const result=await run(()=>api(provider?'/admin/model-providers/'+encodeURIComponent(provider.id)+'/reveal-key':'/admin/model-gateway/reveal-key',{method:'POST'}));revealedKeys[id]=result.key}catch{}}
 const loginForm=reactive({email:'',password:''}),passwordForm=reactive({currentPassword:'',newPassword:''})
+const showPassword=ref(false)
 const organization=ref({name:'开物Praxis',departments:[],profiles:[],policy:{directoryScope:'ORGANIZATION',sharingEnabled:true,revision:0}})
 const department=ref('all'),search=ref(''),statusFilter=ref('all'),recursive=ref(true),selected=ref([])
 const drawer=ref(false),editing=ref(null),saving=ref(false),secret=ref(''),deptModal=ref(false),deptEditing=ref(null)
+const orgNameModal=ref(false),orgNameForm=reactive({name:''})
 const form=reactive({displayName:'',email:'',role:'MEMBER',departmentId:'',username:'',employeeNumber:'',jobTitle:''})
 const deptForm=reactive({name:'',parentId:'',expectedRevision:0})
 const policy=reactive({directoryScope:'ORGANIZATION',sharingEnabled:true,revision:0})
@@ -91,13 +93,92 @@ function openDepartment(d=null,parent=''){deptEditing.value=d;Object.assign(dept
 async function saveDepartment(){try{await run(async()=>{if(deptEditing.value)await patch(`/admin/organization/departments/${deptEditing.value.id}`,deptForm);else await post('/admin/organization/departments',deptForm);deptModal.value=false;await load();Message.success('部门已保存')})}catch{}}
 function deleteDepartment(){if(!currentDepartment.value)return;const d=currentDepartment.value;Modal.confirm({title:`删除部门“${d.name}”`,content:'只有没有成员和子部门的空部门可以删除。',onOk:async()=>{await run(()=>api(`/admin/organization/departments/${d.id}`,{method:'DELETE'}));department.value='all';await load()}})}
 async function savePolicy(){try{await run(async()=>{Object.assign(policy,await api('/admin/organization/policy',{method:'PUT',body:JSON.stringify(policy)}));Message.success('权限策略已保存，DSH 同事目录与新分享即时生效');await load()})}catch{}}
-const permissionRows=[{action:'维护部门与普通成员',owner:'允许',admin:'允许',member:'不允许'},{action:'任命、变更管理员',owner:'允许',admin:'不允许',member:'不允许'},{action:'修改通讯录与分享策略',owner:'允许',admin:'不允许',member:'不允许'},{action:'查看操作记录',owner:'允许',admin:'允许',member:'不允许'},{action:'查找同事与分享资料',owner:'按组织策略',admin:'按组织策略',member:'按组织策略'},{action:'只读查阅本组织会话（记入操作记录）',owner:'允许',admin:'允许',member:'不允许'},{action:'读取协作分享内容',owner:'仅参与双方',admin:'仅参与双方',member:'仅参与双方'}]
-const auditLabel=x=>({'session.content.viewed':'查看会话正文','member.created':'添加成员','member.updated':'更新成员权限','member.disabled':'停用成员','member.profile.updated':'更新成员资料','department.created':'创建部门','department.updated':'编辑部门','department.deleted':'删除部门','organization.policy.updated':'更新组织策略','runtime.credential.revoked':'撤销实例凭据','license.uploaded':'更新企业授权'})[x]||x
-onMounted(async()=>{try{me.value=await api('/auth/me');await load()}catch{me.value=null}})
+function openOrgName(){orgNameForm.name=organization.value.name||'';orgNameModal.value=true}
+async function saveOrgName(){const name=orgNameForm.name.trim();if(!name){Message.warning('请填写企业名称');return false}try{await run(async()=>{const result=await patch('/admin/organization',{name});organization.value={...organization.value,name:result.name};orgNameModal.value=false;Message.success('企业名称已更新')});return true}catch{return false}}
+const permissionRows=[{action:'维护部门与普通成员',owner:'允许',admin:'允许',member:'不允许'},{action:'任命、变更管理员',owner:'允许',admin:'不允许',member:'不允许'},{action:'修改企业名称',owner:'允许',admin:'不允许',member:'不允许'},{action:'修改通讯录与分享策略',owner:'允许',admin:'不允许',member:'不允许'},{action:'查看操作记录',owner:'允许',admin:'允许',member:'不允许'},{action:'查找同事与分享资料',owner:'按组织策略',admin:'按组织策略',member:'按组织策略'},{action:'只读查阅本组织会话（记入操作记录）',owner:'允许',admin:'允许',member:'不允许'},{action:'读取协作分享内容',owner:'仅参与双方',admin:'仅参与双方',member:'仅参与双方'}]
+const auditLabel=x=>({'session.content.viewed':'查看会话正文','member.created':'添加成员','member.updated':'更新成员权限','member.disabled':'停用成员','member.profile.updated':'更新成员资料','department.created':'创建部门','department.updated':'编辑部门','department.deleted':'删除部门','organization.renamed':'修改企业名称','organization.policy.updated':'更新组织策略','runtime.credential.revoked':'撤销实例凭据','license.uploaded':'更新企业授权'})[x]||x
+onMounted(()=>{
+  api('/auth/me').then(async account=>{me.value=account;await load()}).catch(()=>{me.value=null})
+})
 </script>
 
 <template>
-<div v-if="!me||me.mustChangePassword" class="login-wrap"><section class="login-card"><div class="brand"><img class="brand-mark" src="/kaiwu-wordmark.png?v=2" alt="开物"/><span class="brand-divider"></span><span>企业控制台</span></div><h1>{{me?'设置登录密码':'登录企业控制台'}}</h1><p class="muted">管理组织成员、部门及协作权限</p><form class="form-stack" @submit.prevent="me?changePassword():login()"><template v-if="!me"><label>账号<a-input v-model="loginForm.email" autocomplete="username" placeholder="邮箱或登录用户名"/></label><label>密码<a-input-password v-model="loginForm.password" autocomplete="current-password" placeholder="输入密码"/></label></template><template v-else><label>临时密码<a-input-password v-model="passwordForm.currentPassword"/></label><label>新密码（至少 12 位）<a-input-password v-model="passwordForm.newPassword"/></label></template><a-alert v-if="error" type="error">{{error}}</a-alert><a-button type="primary" html-type="submit" long :loading="busy">{{me?'设置密码':'登录'}}</a-button></form></section></div>
+<main v-if="!me||me.mustChangePassword" class="login-shell">
+  <section class="login-brand">
+    <div class="login-ring login-ring-1"></div>
+    <div class="login-ring login-ring-2"></div>
+    <div class="login-lockup animate">
+      <img class="login-logo" src="/kaiwu-wordmark.png?v=2" alt="开物 Praxis"/>
+    </div>
+    <div class="login-copy">
+      <div class="login-eyebrow animate d1"><i></i>企业控制台</div>
+      <h1 class="animate d1">开物成务</h1>
+      <p class="login-slogan animate d2">洞察事物之理，成就企业之务。</p>
+      <ul class="login-feat animate d3">
+        <li>成员与部门统一治理</li>
+        <li>角色权限与操作审计</li>
+        <li>企业模型服务配置</li>
+      </ul>
+    </div>
+    <div class="login-brand-foot">
+      <span>KAIWU PRAXIS</span>
+      <span><span class="login-dot"></span>服务正常</span>
+    </div>
+  </section>
+  <section class="login-form-side">
+    <div class="login-form-wrap">
+      <div class="login-form-head animate">
+        <h2>{{me?'设置登录密码':'登录'}}</h2>
+        <p>{{me?'请设置至少 12 位的新密码后继续':'使用企业管理员账号进入控制台'}}</p>
+      </div>
+      <form autocomplete="on" novalidate @submit.prevent="me?changePassword():login()">
+        <template v-if="!me">
+          <div class="login-field animate d1" :class="{'is-invalid':!!error}">
+            <label for="login-account">账号</label>
+            <div class="login-control">
+              <input id="login-account" v-model="loginForm.email" type="text" autocomplete="username" spellcheck="false" placeholder="邮箱或登录用户名" @input="error=''"/>
+            </div>
+          </div>
+          <div class="login-field animate d2" :class="{'is-invalid':!!error}">
+            <label for="login-password">密码</label>
+            <div class="login-control has-action">
+              <input id="login-password" v-model="loginForm.password" :type="showPassword?'text':'password'" autocomplete="current-password" placeholder="请输入登录密码" @input="error=''"/>
+              <button class="login-reveal" type="button" :aria-label="showPassword?'隐藏密码':'显示密码'" :aria-pressed="showPassword" @click="showPassword=!showPassword">
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M2 10s2.9-5 8-5 8 5 8 5-2.9 5-8 5-8-5-8-5Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                  <circle cx="10" cy="10" r="2.3" stroke="currentColor" stroke-width="1.4"/>
+                  <path v-if="showPassword" d="M4 16 16 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </template>
+        <template v-else>
+          <div class="login-field animate d1" :class="{'is-invalid':!!error}">
+            <label for="login-temp">临时密码</label>
+            <div class="login-control">
+              <input id="login-temp" v-model="passwordForm.currentPassword" type="password" autocomplete="current-password"/>
+            </div>
+          </div>
+          <div class="login-field animate d2" :class="{'is-invalid':!!error}">
+            <label for="login-new">新密码（至少 12 位）</label>
+            <div class="login-control">
+              <input id="login-new" v-model="passwordForm.newPassword" type="password" autocomplete="new-password"/>
+            </div>
+          </div>
+        </template>
+        <div v-if="error" class="login-alert is-on" role="alert">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M8 4.6v4.2M8 11.4v.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          <span>{{error}}</span>
+        </div>
+        <button class="login-submit animate d3" type="submit" :disabled="busy">{{busy?(me?'保存中…':'登录中…'):(me?'设置密码':'登 录')}}</button>
+      </form>
+    </div>
+  </section>
+</main>
 <div v-else class="console">
 <header class="header"><div class="brand"><img class="brand-mark" src="/kaiwu-wordmark.png?v=2" alt="开物"/><span class="brand-divider"></span><span>企业控制台</span></div><div class="header-right"><a-dropdown @select="logout"><button class="account-menu"><a-avatar :size="28">{{me.displayName.slice(0,1)}}</a-avatar>{{me.displayName}}<icon-down/></button><template #content><a-doption value="logout">退出登录</a-doption></template></a-dropdown></div></header>
 <aside class="sidebar"><a-menu :selected-keys="[page]" :default-open-keys="['organization','security']" @menu-item-click="navigate"><a-menu-item key="overview"><template #icon><icon-apps/></template>总览</a-menu-item><a-sub-menu v-if="admin" key="organization"><template #icon><icon-user-group/></template><template #title>组织</template><a-menu-item key="members">成员与部门</a-menu-item><a-menu-item key="roles">角色权限</a-menu-item><a-menu-item key="visibility">通讯录范围</a-menu-item></a-sub-menu><a-sub-menu v-if="admin" key="security"><template #icon><icon-safe/></template><template #title>审计</template><a-menu-item key="audit">操作记录</a-menu-item><a-menu-item key="sessions">会话查阅</a-menu-item></a-sub-menu><a-menu-item v-if="admin" key="models"><template #icon><icon-robot/></template>模型服务</a-menu-item><a-menu-item v-if="admin" key="settings"><template #icon><icon-idcard/></template>企业信息</a-menu-item></a-menu></aside>
@@ -132,7 +213,7 @@ onMounted(async()=>{try{me.value=await api('/auth/me');await load()}catch{me.val
 <div class="model-actions"><a-button type="primary" html-type="submit" :loading="saving">保存配置</a-button></div>
 </form></section><section v-else-if="page==='sessions'" class="content-panel"><h2>会话查阅</h2><p class="muted">管理员可只读查看本组织成员的聊天正文，查看会记入操作记录。</p><a-table :data="sessions" :pagination="false" :bordered="false"><template #columns><a-table-column title="成员" data-index="memberName"/><a-table-column title="会话 ID" data-index="sessionId" ellipsis/><a-table-column title="创建时间"><template #cell="{record}">{{new Date(record.createdAt).toLocaleString()}}</template></a-table-column><a-table-column title="操作"><template #cell="{record}"><a-button type="text" @click="viewSession(record)">查看正文</a-button></template></a-table-column></template></a-table><a-space><a-button :disabled="sessionOffset===0" @click="sessionOffset-=50;loadSessions()">上一页</a-button><a-button :disabled="sessions.length&lt;50" @click="sessionOffset+=50;loadSessions()">下一页</a-button></a-space></section>
 <section v-else-if="page==='audit'" class="content-panel"><h2>操作记录</h2><p class="muted">记录组织管理与协作操作，不展示成员私有会话正文。最近 100 条。</p><a-table :data="audits" row-key="id" :bordered="false"><template #columns><a-table-column title="操作时间" :width="170"><template #cell="{record}">{{new Date(record.occurredAt).toLocaleString()}}</template></a-table-column><a-table-column title="操作人" :width="130"><template #cell="{record}">{{members.find(m=>m.id===record.actorId)?.displayName||'已移除成员'}}</template></a-table-column><a-table-column title="操作"><template #cell="{record}">{{auditLabel(record.action)}}</template></a-table-column><a-table-column title="对象 ID" data-index="targetId" ellipsis/></template></a-table></section>
-<section v-else class="content-panel org-profile"><div class="org-profile-head"><div><p class="org-kicker">企业名称</p><h2>{{organization.name}}</h2></div><span class="org-role">{{roleLabel(me.role)}}</span></div><dl class="org-facts"><div><dt>当前账号</dt><dd>{{me.email}}</dd></div><div><dt>登录方式</dt><dd>邮箱 / 管理员设置的登录用户名</dd></div><div><dt>运行端</dt><dd>通过外置企业身份与协作插件接入 DSH</dd></div><div><dt>安装标识</dt><dd><code>{{ license?.installationId || '—' }}</code><a-button type="text" size="small" @click="copyInstallation">复制</a-button></dd></div>
+<section v-else class="content-panel org-profile"><div class="org-profile-head"><div><p class="org-kicker">企业名称</p><div class="org-name-row"><h2>{{organization.name}}</h2><a-button v-if="owner" type="text" size="small" @click="openOrgName">修改</a-button></div></div><span class="org-role">{{roleLabel(me.role)}}</span></div><dl class="org-facts"><div><dt>当前账号</dt><dd>{{me.email}}</dd></div><div><dt>登录方式</dt><dd>邮箱 / 管理员设置的登录用户名</dd></div><div><dt>运行端</dt><dd>通过外置企业身份与协作插件接入 DSH</dd></div><div><dt>安装标识</dt><dd><code>{{ license?.installationId || '—' }}</code><a-button type="text" size="small" @click="copyInstallation">复制</a-button></dd></div>
 <div><dt>授权状态</dt><dd>{{ licenseStatusText }}</dd></div>
 <div><dt>授权客户</dt><dd>{{ license?.customer || '—' }}</dd></div>
 <div><dt>席位</dt><dd>{{ license ? license.seatsUsed + ' / ' + (license.seats ?? '—') : '—' }}</dd></div>
@@ -148,6 +229,7 @@ onMounted(async()=>{try{me.value=await api('/auth/me');await load()}catch{me.val
 <a-drawer :visible="!!sessionDetail" title="会话正文" :width="720" :footer="false" @cancel="sessionDetail=null;sessionMessages=[]"><p class="muted">{{sessionDetail?.memberName}} · 只读查看</p><a-empty v-if="!sessionMessages.length" description="当前记录没有聊天正文"/><article v-for="message in sessionMessages" :key="message.seq" style="margin-bottom:24px"><strong>{{message.role==='user'?'用户':'助手'}}</strong><small class="muted"> · {{new Date(message.time).toLocaleString()}}</small><pre style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit">{{messageText(message.content)||'[非文本内容]'}}</pre></article><a-button v-if="sessionMore" @click="viewSession(sessionDetail,true)">加载更多</a-button></a-drawer>
 <a-drawer v-model:visible="drawer" :title="editing?'编辑成员':'添加成员'" :width="520" :footer="true" :unmount-on-close="true"><div class="drawer-section-title">基本信息</div><a-form :model="form" layout="vertical"><a-form-item label="姓名" required><a-input v-model="form.displayName" :max-length="64" placeholder="输入成员姓名"/></a-form-item><a-form-item label="主部门"><a-select v-model="form.departmentId" :options="deptOptions" allow-clear placeholder="选择主部门"/></a-form-item><a-form-item label="邮箱" required><a-input v-model="form.email" :disabled="!!editing" placeholder="name@company.com"/></a-form-item><a-form-item label="登录用户名" help="由管理员设置，2–64 位字母、数字、点、下划线或短横线"><a-input v-model="form.username" placeholder="例如 zhangsan"/></a-form-item><div class="drawer-section-title">组织与岗位</div><a-form-item label="组织角色"><a-select v-model="form.role" :disabled="!owner"><a-option value="MEMBER">成员</a-option><a-option value="ADMIN">管理员</a-option></a-select></a-form-item><a-form-item label="工号"><a-input v-model="form.employeeNumber" :max-length="64"/></a-form-item><a-form-item label="职位"><a-input v-model="form.jobTitle" :max-length="64"/></a-form-item></a-form><a-alert v-if="!editing">直接添加后生成一次性临时密码，成员首次登录须修改。当前不发送邀请邮件。</a-alert><template #footer><a-space><a-button @click="drawer=false">取消</a-button><a-button type="primary" :loading="saving" @click="saveMember">保存</a-button></a-space></template></a-drawer>
 <a-modal v-model:visible="deptModal" :title="deptEditing?'编辑部门':'添加部门'" @before-ok="async()=>{await saveDepartment();return !deptModal}"><a-form :model="deptForm" layout="vertical"><a-form-item label="部门名称" required><a-input v-model="deptForm.name" :max-length="64"/></a-form-item><a-form-item label="上级部门"><a-select v-model="deptForm.parentId" :options="deptOptions.filter(d=>d.value!==deptEditing?.id)" allow-clear placeholder="不选则为一级部门"/></a-form-item></a-form></a-modal>
+<a-modal v-model:visible="orgNameModal" title="修改企业名称" @before-ok="saveOrgName"><a-form :model="orgNameForm" layout="vertical"><a-form-item label="企业名称" required><a-input v-model="orgNameForm.name" :max-length="160" placeholder="输入企业名称" allow-clear/></a-form-item></a-form></a-modal>
 <a-modal v-model:visible="moveModal" title="批量调整部门" @before-ok="async()=>{await moveMembers();return !moveModal}"><p>调整所选 {{selected.length}} 位成员的主部门。</p><a-select v-model="moveDepartment" :options="deptOptions" allow-clear placeholder="选择部门（清空为未分配）"/></a-modal>
 <a-modal :visible="!!secret" title="成员临时密码" :footer="false" @cancel="secret=''"><p>请通过安全渠道交给成员。关闭后不会再次显示。</p><code class="credential">{{secret}}</code><a-button type="primary" @click="secret=''">我已记录</a-button></a-modal>
 </template>

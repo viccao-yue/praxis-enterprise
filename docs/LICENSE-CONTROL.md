@@ -16,7 +16,7 @@
 
 ## 1. 行为
 
-生产默认执行授权。`src/test/resources/application.properties` 设置 `开物Praxis.license.enforced=false`，现有测试保持现在的行为。只有 `LicenseControlTest` 用 `@SpringBootTest(properties=...)` 把它设回 `true`。`@SpringBootTest` 的 properties 覆盖测试用的 `application.properties`。
+生产默认执行授权。`src/test/resources/application.properties` 设置 `workdsh.license.enforced=false`，现有测试保持现在的行为。只有 `LicenseControlTest` 用 `@SpringBootTest(properties=...)` 把它设回 `true`。`@SpringBootTest` 的 properties 覆盖测试用的 `application.properties`。
 
 `enforced=false` 时，`allowLogin`、`actor` 里的授权检查、`requireUsable`、`requireSeat`、`requireFeature` 直接返回。`GET /api/admin/license` 仍返回安装标识和 `status=none`。
 
@@ -87,7 +87,7 @@ sessionView=false
 
 ## 3. 密钥
 
-安装包里的验签公钥放在 `server/src/main/resources/license-public.pem`。这就是客户服务器用来验签的那把公钥，不是用完可弃的样例。私钥路径由环境变量 `开物Praxis_LICENSE_PRIVATE_KEY` 给出，不进 Git。在 `.gitignore` 增加 `license-private.pem`。
+安装包里的验签公钥放在 `server/src/main/resources/license-public.pem`。这就是客户服务器用来验签的那把公钥，不是用完可弃的样例。私钥路径由环境变量 `WORKDSH_LICENSE_PRIVATE_KEY` 给出，不进 Git。在 `.gitignore` 增加 `license-private.pem`。
 
 生成命令：
 
@@ -233,13 +233,13 @@ void allowLogin(String organizationId, String role)
 在 `server/pom.xml` 增加 `exec-maven-plugin`，`mainClass` 为 `com.kaiwu.praxis.admin.license.IssueLicense`。
 
 ```sh
-export 开物Praxis_LICENSE_PRIVATE_KEY=/绝对路径/license-private.pem
+export WORKDSH_LICENSE_PRIVATE_KEY=/绝对路径/license-private.pem
 mvn -f server/pom.xml -q compile exec:java -Dexec.args="--customer 开物示例 --installation-id 550e8400-e29b-41d4-a716-446655440000 --not-before 2026-10-23T00:00:00Z --not-after 2027-10-23T00:00:00Z --seats 50 --sharing true --model-gateway true --session-view true"
 ```
 
 标准输出只打印许可证 JSON。参数缺漏或私钥读不到时，进程以非 0 退出，错误写到标准错误。`not-before` 可省略，省略时用命令启动时的 `Instant.now()` 截到秒，并且格式化成 `Instant.parse` 能读回的 UTC 字符串。三个功能参数省略时是 `false`。显式传入时只能是 `true` 或 `false`，其他写法签发失败，不能悄悄当成关闭。
 
-Maven 可能把 `exec.args` 里的空格拆开。`customer` 含空格时改用无空格名称，或在 `IssueLicense` 里同时接受环境变量 `开物Praxis_LICENSE_CUSTOMER`。实现时用一条不含空格的 customer 做签发自测，确认标准输出是第 2 节的 JSON。
+Maven 可能把 `exec.args` 里的空格拆开。`customer` 含空格时改用无空格名称，或在 `IssueLicense` 里同时接受环境变量 `WORKDSH_LICENSE_CUSTOMER`。实现时用一条不含空格的 customer 做签发自测，确认标准输出是第 2 节的 JSON。
 
 ## 9. 管理页
 
@@ -257,7 +257,7 @@ Maven 可能把 `exec.args` 里的空格拆开。`customer` 含空格时改用�
 
 ## 10. 测试
 
-新增 `server/src/test/java/com/kaiwu/praxis/admin/LicenseControlTest.java`。H2 内存库、`MockMvc`、独立的 bootstrap 管理员。属性里 `开物Praxis.license.enforced=true`。用第 5 节的 `@Primary` 公钥接入测试密钥。断言错误文案时读 JSON 的 `detail`。
+新增 `server/src/test/java/com/kaiwu/praxis/admin/LicenseControlTest.java`。H2 内存库、`MockMvc`、独立的 bootstrap 管理员。属性里 `workdsh.license.enforced=true`。用第 5 节的 `@Primary` 公钥接入测试密钥。断言错误文案时读 JSON 的 `detail`。
 
 下面每一条都是独立的 `@Test`。需要前面步骤的结果时，在本条里重新做一遍，不读取其他测试留下的数据。
 
@@ -281,7 +281,7 @@ Maven 可能把 `exec.args` 里的空格拆开。`customer` 含空格时改用�
 8. 成员在有效许可证下登录成功。再上传一份席位数仍不少于当前有效人数、其余字段相同、但 `notAfter` 早于当前时间的许可证。该成员再请求 `GET /api/auth/me` 返回 403 `企业授权无效，请所有者更新许可证`。所有者的 `GET /api/auth/me` 仍是 200，并且仍能 `GET /api/admin/license`。
 9. 本条自己完成整个顺序。用 SQL 插入一名合格收件人。上传 `sharing=true` 的许可证，所有者 `POST /api/collaboration/handoffs` 成功。再上传一份许可证：只把 `sharing` 改成 `false` 并重新签名，`notBefore`、`notAfter`、席位和其他开关都不变。用同一把 `requestKey`、同一个收件人和同一段摘要重试，仍返回原来的交接。换一把新的 `requestKey` 再发，返回 403 `企业授权未包含此功能`。
 10. 本条不依赖第 9 条的数据。用 SQL 插入另一名合格收件人。先上传 `sharing=true` 的许可证，只用交接接口建一条没有材料的交接。再按第 9 条的方式把 `sharing` 改为 `false`。然后 `POST /api/collaboration/materials`，请求里的 `recipientId`、`requestKey`、`summary` 必须和这条交接相同，这样 `send()` 会返回原交接，而不是再建一条。返回 403 `企业授权未包含此功能`，并且 `collaboration_materials` 没有新行。
-11. `modelGateway=false`、其余授权有效时，测试上下文提供 `开物Praxis.secrets.encryption-key`。先 `PUT /api/admin/model-gateway` 写入至少 32 位、不含空白的内部 Key，再拿这把 Key 调用 `/api/model-gateway/v1/models`，返回 403 `企业授权未包含此功能`。这次 `PUT` 本身成功。
+11. `modelGateway=false`、其余授权有效时，测试上下文提供 `workdsh.secrets.encryption-key`。先 `PUT /api/admin/model-gateway` 写入至少 32 位、不含空白的内部 Key，再拿这把 Key 调用 `/api/model-gateway/v1/models`，返回 403 `企业授权未包含此功能`。这次 `PUT` 本身成功。
 12. `sessionView=false`、其余授权有效时，`GET /api/admin/sessions` 返回 403 `企业授权未包含此功能`。
 13. 先上传一份有效许可证，三个功能可以都打开。用 SQL 插入一名 `must_change_password=false` 的管理员和一名同样已经设好密码的普通成员。管理员 `GET /api/admin/license` 返回 200，`PUT` 返回 403，`detail` 是 `只有所有者可以更新企业授权`。普通成员 `GET` 返回 403，`detail` 是 `Admin role required`。
 

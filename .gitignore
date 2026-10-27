@@ -15,3 +15,5 @@ license-private.pem
 .artifacts/
 **/__pycache__/
 *.py[cod]
+config/
+server/kaiwu-praxis-admin-server.jar

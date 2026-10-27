@@ -22,8 +22,8 @@ public class BrowserSessionFilter extends OncePerRequestFilter {
     public static final String COOKIE_NAME = "workdsh-admin-session";
     private final String webOrigin;
 
-    public BrowserSessionFilter(@Value("${workdsh.web.origin:http://127.0.0.1:18891}") String webOrigin) {
-        this.webOrigin = webOrigin;
+    public BrowserSessionFilter(@Value("${workdsh.web.origin:}") String webOrigin) {
+        this.webOrigin = webOrigin == null ? "" : webOrigin.trim();
     }
 
     @Override
@@ -41,7 +41,7 @@ public class BrowserSessionFilter extends OncePerRequestFilter {
         if (browserLogin || token != null) {
             String site = request.getHeader("Sec-Fetch-Site");
             if ("cross-site".equals(site)) { response.sendError(403); return; }
-            if (!isRead(request.getMethod()) && !webOrigin.equals(request.getHeader("Origin"))) {
+            if (!isRead(request.getMethod()) && !originAllowed(request, request.getHeader("Origin"))) {
                 response.sendError(403); return;
             }
         }
@@ -65,6 +65,29 @@ public class BrowserSessionFilter extends OncePerRequestFilter {
                 return Collections.enumeration(names);
             }
         }, response);
+    }
+
+    private boolean originAllowed(HttpServletRequest request, String origin) {
+        if (origin == null || origin.isBlank()) return false;
+        if (!webOrigin.isEmpty()) return webOrigin.equals(origin);
+        return requestOrigin(request).equals(origin);
+    }
+
+    /** Same-host Origin inferred from the current request (supports field IPs / reverse proxy). */
+    static String requestOrigin(HttpServletRequest request) {
+        String host = firstHop(request.getHeader("X-Forwarded-Host"));
+        if (host == null || host.isBlank()) host = request.getHeader("Host");
+        if (host == null || host.isBlank()) host = request.getServerName()
+                + (request.getServerPort() == 80 || request.getServerPort() == 443 ? "" : ":" + request.getServerPort());
+        String proto = firstHop(request.getHeader("X-Forwarded-Proto"));
+        if (proto == null || proto.isBlank()) proto = request.getScheme();
+        return proto + "://" + host;
+    }
+
+    private static String firstHop(String value) {
+        if (value == null || value.isBlank()) return null;
+        int comma = value.indexOf(',');
+        return (comma < 0 ? value : value.substring(0, comma)).trim();
     }
 
     private static boolean isRead(String method) { return method.equals("GET") || method.equals("HEAD"); }

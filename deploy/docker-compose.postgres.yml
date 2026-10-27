@@ -1,0 +1,25 @@
+# 现场/验收用 PostgreSQL（与管理端分进程）。
+# 用法：
+#   docker compose -f deploy/docker-compose.postgres.yml up -d
+#   再按 deploy/IMMEDIATE-DELIVERY.md 跑迁移并启动管理端。
+services:
+  postgres:
+    image: postgres:16
+    container_name: kaiwu-praxis-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: kaiwu_praxis
+      POSTGRES_USER: praxis_maint
+      POSTGRES_PASSWORD: ${POSTGRES_MAINT_PASSWORD:?set POSTGRES_MAINT_PASSWORD}
+    ports:
+      - "${POSTGRES_PORT:5432}:5432"
+    volumes:
+      - kaiwu_praxis_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U praxis_maint -d kaiwu_praxis"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  kaiwu_praxis_pg_data:

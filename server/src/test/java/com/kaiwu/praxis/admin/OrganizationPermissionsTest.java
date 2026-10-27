@@ -28,6 +28,9 @@ class OrganizationPermissionsTest {
  call(delete("/api/admin/organization/departments/"+d1).header("Authorization","Bearer "+owner),400);
  call(body(patch("/api/admin/organization/departments/"+d1),owner,Map.of("name","销售","parentId",d1,"expectedRevision",1)),400);
  call(body(put("/api/admin/organization/policy"),adt,Map.of("directoryScope","DEPARTMENT","sharingEnabled",true,"revision",0)),403);
+ call(body(patch("/api/admin/organization"),adt,Map.of("name","改名失败")),403);
+ assertEquals("验收企业",call(body(patch("/api/admin/organization"),owner,Map.of("name","验收企业")),200).path("name").asText());
+ assertEquals("验收企业",call(get("/api/admin/organization").header("Authorization","Bearer "+owner),200).path("name").asText());
  call(body(put("/api/admin/organization/policy"),owner,Map.of("directoryScope","DEPARTMENT","sharingEnabled",true,"revision",0)),200);
  assertFalse(call(get("/api/members").header("Authorization","Bearer "+at),200).toString().contains(b));
  assertFalse(call(get("/api/collaboration/colleagues").header("Authorization","Bearer "+at),200).toString().contains(b));

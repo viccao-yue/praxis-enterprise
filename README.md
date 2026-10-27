@@ -23,7 +23,9 @@
 
 ## 本地开发
 
-需要 Java 17+、Maven 3.9+、Node 22.19+ 或 24+。首次启动通过受控环境设置 `WORKDSH_BOOTSTRAP_ADMIN_EMAIL` 和至少 12 位的 `WORKDSH_BOOTSTRAP_ADMIN_PASSWORD`（当前代码仍使用该环境变量名）。不要把实际凭据写入命令历史、日志或源码。
+需要 Java 17+、Maven 3.9+、Node 22.19+ 或 24+。空库首次启动默认所有者 `admin` / `Sun55kong!`（可用 `WORKDSH_BOOTSTRAP_*` 覆盖；本轮暂不强制改密）。
+
+**对外交付（推荐）：** 打候选包并安装后执行 `python3 scripts/delivery-bootstrap.py`，默认起 PostgreSQL + 自签 HTTPS（Docker）。详见 [马上对外交付手册](deploy/IMMEDIATE-DELIVERY.md)。
 
 ```sh
 mvn -f server/pom.xml spring-boot:run
@@ -37,7 +39,7 @@ npm ci
 npm run dev
 ```
 
-管理网页默认 `http://127.0.0.1:18891/`，Java 默认 `127.0.0.1:18890`。默认开发数据库为 `server/data` 下的 H2。企业服务器显式选择 `enterprise-mysql`、`enterprise-postgres` 或测试用 `enterprise-sqlite`；见 [数据库配置](docs/ENTERPRISE-DATABASES.md)。开发态旧测试数据库与 Profile 不做兼容迁移；使用当前新库 schema 初始化独立验收环境。不要对已运行数据库直接重跑新库 schema。
+本地开发：管理网页 `http://127.0.0.1:18891/`，Java `18890`。服务默认监听 `0.0.0.0`（可用 `BIND_ADDRESS` 收紧）。`WORKDSH_ADMIN_WEB_ORIGIN` 留空时按请求 Host 自动判定管理端同源，适合现场 IP 不固定；前后端分离或 HTTPS 时再显式配置该地址。默认开发数据库为 `server/data` 下的 H2。企业服务器显式选择 `enterprise-mysql`、`enterprise-postgres` 或测试用 `enterprise-sqlite`；见 [数据库配置](docs/ENTERPRISE-DATABASES.md)。开发态旧测试数据库与 Profile 不做兼容迁移；使用当前新库 schema 初始化独立验收环境。不要对已运行数据库直接重跑新库 schema。
 
 后台私密存储需要 `WORKDSH_SECRETS_ENCRYPTION_KEY`（32 字节随机密钥的 Base64）和服务器间 `WORKDSH_SECRETS_SERVICE_KEY`。凭据在包外管理，不下发浏览器。登录只使用实际成员密码，没有简单测试账号替换逻辑。
 

@@ -1,0 +1,98 @@
+# One-click field delivery: PostgreSQL + admin + self-signed HTTPS (Caddy).
+# Run: python3 scripts/delivery-bootstrap.py
+# Compose reads project .env (written by bootstrap from config/secrets.env).
+name: kaiwu-praxis-delivery
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    env_file:
+      - ./config/secrets.env
+    environment:
+      POSTGRES_DB: kaiwu_praxis
+      POSTGRES_USER: praxis_maint
+      POSTGRES_PASSWORD: ${POSTGRES_MAINT_PASSWORD:?run delivery-bootstrap.py first}
+    volumes:
+      - praxis_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U praxis_maint -d kaiwu_praxis"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [praxis]
+
+  # One-shot schema/grants. Invoked by delivery-bootstrap.py, not on every `compose up`.
+  db-init:
+    image: postgres:16
+    profiles: ["init"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./config/secrets.env
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: praxis_maint
+      PGDATABASE: kaiwu_praxis
+      POSTGRES_MAINT_PASSWORD: ${POSTGRES_MAINT_PASSWORD:?}
+      JDBC_PASSWORD: ${JDBC_PASSWORD:?}
+    volumes:
+      - ./config/schema-migrate.sql:/init/schema-migrate.sql:ro
+      - ./deploy/postgres/runtime-grants.sql:/init/runtime-grants.sql:ro
+      - ./deploy/delivery/db-init.sh:/init/db-init.sh:ro
+    entrypoint: ["/bin/bash", "/init/db-init.sh"]
+    networks: [praxis]
+
+  admin:
+    image: eclipse-temurin:17-jre
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./config/secrets.env
+    environment:
+      SPRING_PROFILES_ACTIVE: enterprise-postgres
+      JDBC_URL: jdbc:postgresql://postgres:5432/kaiwu_praxis
+      JDBC_USER: workdsh_app
+      BIND_ADDRESS: 0.0.0.0
+      PORT: "18890"
+      SPRING_WEB_RESOURCES_STATIC_LOCATIONS: file:/opt/workdsh/static/
+      WORKDSH_ADMIN_WEB_ORIGIN: ""
+    volumes:
+      - ./server/kaiwu-praxis-admin-server.jar:/opt/workdsh/server.jar:ro
+      - ./web/dist:/opt/workdsh/static:ro
+      - praxis_admin_state:/state
+    working_dir: /state
+    command: ["java", "-jar", "/opt/workdsh/server.jar"]
+    expose:
+      - "18890"
+    networks: [praxis]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - admin
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./deploy/delivery/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./config/tls:/etc/caddy/tls:ro
+      - praxis_caddy_data:/data
+      - praxis_caddy_config:/config
+    networks: [praxis]
+
+volumes:
+  praxis_pg_data:
+  praxis_admin_state:
+  praxis_caddy_data:
+  praxis_caddy_config:
+
+networks:
+  praxis:
+    driver: bridge

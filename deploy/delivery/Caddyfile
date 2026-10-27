@@ -1,0 +1,21 @@
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	redir https://{host}{uri} permanent
+}
+
+:443 {
+	tls /etc/caddy/tls/cert.pem /etc/caddy/tls/key.pem
+	encode gzip
+	reverse_proxy admin:18890 {
+		header_up Host {host}
+		header_up X-Forwarded-Proto https
+		transport http {
+			read_timeout 3600s
+			write_timeout 3600s
+		}
+	}
+}

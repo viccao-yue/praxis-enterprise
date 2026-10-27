@@ -14,6 +14,15 @@ FIXED = {
     'deploy/postgres/README.md': 'deploy/postgres/README.md',
     'docs/ENTERPRISE-DATABASES.md': 'docs/ENTERPRISE-DATABASES.md',
     'docs/DESKTOP-VISIBLE-SESSIONS-API.md': 'docs/DESKTOP-VISIBLE-SESSIONS-API.md',
+    'deploy/IMMEDIATE-DELIVERY.md': 'deploy/IMMEDIATE-DELIVERY.md',
+    'deploy/nginx-https.example.conf': 'deploy/nginx-https.example.conf',
+    'deploy/docker-compose.postgres.yml': 'deploy/docker-compose.postgres.yml',
+    'deploy/docker-compose.delivery.yml': 'deploy/docker-compose.delivery.yml',
+    'deploy/delivery/Caddyfile': 'deploy/delivery/Caddyfile',
+    'deploy/delivery/db-init.sh': 'deploy/delivery/db-init.sh',
+    'scripts/generate-field-secrets.py': 'scripts/generate-field-secrets.py',
+    'scripts/delivery-bootstrap.py': 'scripts/delivery-bootstrap.py',
+    'scripts/install-admin-release.py': 'scripts/install-admin-release.py',
     'README.md': 'deploy/ADMIN-SERVER-CANDIDATE.md',
 }
 
