@@ -31,3 +31,24 @@ jobs:
           npm run build
       - name: Verify release archive boundary
         run: python3 scripts/test-admin-release.py
+      - name: Pack admin candidate zip
+        run: |
+          mkdir -p dist
+          python3 scripts/pack-admin-release.py --output "$GITHUB_WORKSPACE/dist/kaiwu-praxis-admin-candidate.zip"
+          python3 - <<'PY'
+          import hashlib, pathlib
+          path = pathlib.Path('dist/kaiwu-praxis-admin-candidate.zip')
+          digest = hashlib.sha256(path.read_bytes()).hexdigest()
+          pathlib.Path('dist/kaiwu-praxis-admin-candidate.zip.sha256').write_text(
+              f'{digest}  {path.name}\n', encoding='utf-8')
+          print(f'packed {path.name} sha256={digest} bytes={path.stat().st_size}')
+          PY
+      - name: Upload admin candidate artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kaiwu-praxis-admin-candidate
+          path: |
+            dist/kaiwu-praxis-admin-candidate.zip
+            dist/kaiwu-praxis-admin-candidate.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
