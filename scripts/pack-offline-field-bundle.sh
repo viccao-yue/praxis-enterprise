@@ -57,8 +57,9 @@ curl -fL --retry 3 -o "$BUNDLE/docker-compose" \
   "https://github.com/docker/compose/releases/download/v${COMPOSE_VER}/docker-compose-linux-x86_64"
 chmod 0755 "$BUNDLE/docker-compose"
 install -m 0644 "$ROOT/deploy/offline/docker.service" "$BUNDLE/docker.service"
-# sanity: tarball contains dockerd
-tar -tzf "$BUNDLE/docker-static.tgz" | grep -q 'docker/dockerd'
+# sanity: tarball contains dockerd (avoid SIGPIPE from grep -q)
+tar -tzf "$BUNDLE/docker-static.tgz" > "$STAGE/docker-static.list"
+grep -q 'docker/dockerd' "$STAGE/docker-static.list"
 echo "docker static $(wc -c < "$BUNDLE/docker-static.tgz") bytes, compose $(wc -c < "$BUNDLE/docker-compose") bytes"
 
 echo "==> 写入一键安装脚本与说明"
