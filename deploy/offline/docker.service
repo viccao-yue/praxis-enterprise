@@ -1,0 +1,19 @@
+[Unit]
+Description=Docker (static binary for offline field install)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/bin/dockerd
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=2
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+Delegate=yes
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

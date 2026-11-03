@@ -1,11 +1,6 @@
 name: Offline field bundle
 on:
   workflow_dispatch:
-    inputs:
-      with_debs:
-        description: 'Also download Ubuntu 22.04 .deb packages into the bundle'
-        type: boolean
-        default: true
 permissions:
   contents: read
 jobs:
@@ -38,7 +33,6 @@ jobs:
       - name: Pack offline field bundle
         env:
           DOCKER_PLATFORM: linux/amd64
-          WITH_DEBS: ${{ inputs.with_debs && '1' || '0' }}
         run: |
           chmod +x scripts/pack-offline-field-bundle.sh deploy/offline/install-on-customer.sh
           sudo apt-get update

@@ -48,50 +48,44 @@ for img in "${IMAGES[@]}"; do
 done
 docker save "${IMAGES[@]}" -o "$BUNDLE/praxis-docker-images.tar"
 
+echo "==> 下载 Docker 静态程序（客户机无需预装 Docker）"
+DOCKER_VER="${DOCKER_STATIC_VERSION:-27.5.1}"
+COMPOSE_VER="${COMPOSE_STATIC_VERSION:-2.32.4}"
+curl -fL --retry 3 -o "$BUNDLE/docker-static.tgz" \
+  "https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VER}.tgz"
+curl -fL --retry 3 -o "$BUNDLE/docker-compose" \
+  "https://github.com/docker/compose/releases/download/v${COMPOSE_VER}/docker-compose-linux-x86_64"
+chmod 0755 "$BUNDLE/docker-compose"
+install -m 0644 "$ROOT/deploy/offline/docker.service" "$BUNDLE/docker.service"
+# sanity: tarball contains dockerd
+tar -tzf "$BUNDLE/docker-static.tgz" | grep -q 'docker/dockerd'
+echo "docker static $(wc -c < "$BUNDLE/docker-static.tgz") bytes, compose $(wc -c < "$BUNDLE/docker-compose") bytes"
+
 echo "==> 写入一键安装脚本与说明"
 install -m 0755 "$ROOT/deploy/offline/install-on-customer.sh" "$BUNDLE/install-on-customer.sh"
 cat > "$BUNDLE/先读我.txt" <<'EOF'
 开物Praxis 企业控制台 · 纯内网离线包
 ================================
 
-现场只做三步：
+客户机不需要预装 Docker，也不需要外网。
 
 1) 把本目录整个拷到业务机，例如 /home/deploy/praxis-offline-field
 
-2) SSH 登录业务机后执行（把 IP 换成业务机内网 IP）：
+2) SSH 登录后执行（把 IP 换成业务机内网 IP）：
 
    cd /home/deploy/praxis-offline-field
    sudo -E DELIVERY_HOST=10.10.10.11 bash install-on-customer.sh
 
 3) 浏览器打开 https://10.10.10.11/  （接受自签证书警告）
-   账号见安装完成后的提示，或 /opt/kaiwu-praxis-admin/config/BOOTSTRAP-ONCE.txt
+   账号见 /opt/kaiwu-praxis-admin/config/BOOTSTRAP-ONCE.txt
 
-要求：
-- Ubuntu Server 22.04 x86_64
-- 机器上最好已有 Docker（本包已含镜像，不必访问外网）
-- 若没有 Docker，且目录里有 ubuntu22-debs/，脚本会尝试离线安装
+系统要求：Ubuntu Server 22.04 x86_64，自带 python3 和 openssl（Server 默认有）。
+本包自带 Docker 静态程序和镜像，脚本会自己安装并启动 Docker。
 
 装完立刻备份：
   /opt/kaiwu-praxis-admin/config/secrets.env
   /opt/kaiwu-praxis-admin/config/tls/
 EOF
-
-if [[ "$WITH_DEBS" == "1" ]]; then
-  echo "==> 下载 Ubuntu 22.04 deb（尽力而为）"
-  mkdir -p "$BUNDLE/ubuntu22-debs"
-  if command -v apt-get >/dev/null 2>&1; then
-    (
-      cd "$BUNDLE/ubuntu22-debs"
-      apt-get download docker.io docker-compose-v2 containerd runc python3 openssl ca-certificates curl unzip 2>/dev/null || true
-      # 再拉一层常见依赖名（失败忽略）
-      apt-cache depends docker.io 2>/dev/null | awk '/Depends:/{print $2}' | grep -v '[<]' | sort -u \
-        | xargs -r apt-get download 2>/dev/null || true
-    )
-    echo "deb 数量: $(ls -1 "$BUNDLE/ubuntu22-debs"/*.deb 2>/dev/null | wc -l)"
-  else
-    echo "当前系统无 apt-get，跳过 deb"
-  fi
-fi
 
 echo "==> 打包 $OUT"
 mkdir -p "$(dirname "$OUT")"

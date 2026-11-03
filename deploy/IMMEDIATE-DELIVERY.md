@@ -4,7 +4,7 @@
 
 ## 主路径 A：纯内网离线大包（推荐给无外网客户）
 
-在 GitHub Actions 跑 **Offline field bundle**，下载 Artifact `praxis-offline-field`（内含候选 zip、amd64 镜像 tar、一键脚本，可选 Ubuntu deb）。
+在 GitHub Actions 跑 **Offline field bundle**，下载 Artifact `praxis-offline-field`（内含候选 zip、amd64 镜像、Docker 静态程序、一键脚本）。客户机不必预装 Docker。
 
 现场：
 
