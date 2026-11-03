@@ -2,9 +2,23 @@
 
 对应差距清单第 7 节。优先走「一键交付」；打勾后再签客户验收。
 
-## 主路径：Docker + 自签 HTTPS（推荐）
+## 主路径 A：纯内网离线大包（推荐给无外网客户）
 
-现场只需 Docker / Docker Compose。安装后默认：**PostgreSQL**、**自签 HTTPS**、**无源码明文口令**、**密钥落盘**、反代下 **Secure Cookie**。
+在 GitHub Actions 跑 **Offline field bundle**，下载 Artifact `praxis-offline-field`（内含候选 zip、amd64 镜像 tar、一键脚本，可选 Ubuntu deb）。
+
+现场：
+
+```bash
+tar -xzf praxis-offline-field.tgz
+cd praxis-offline-field
+sudo -E DELIVERY_HOST=192.168.x.x bash install-on-customer.sh
+```
+
+浏览器打开 `https://192.168.x.x/`。本地打包：`./scripts/pack-offline-field-bundle.sh /tmp/praxis-offline-field.tgz`（需能拉镜像；Apple Silicon 用 `DOCKER_PLATFORM=linux/amd64`）。
+
+## 主路径 B：已有 Docker 的在线/半在线环境
+
+现场已有 Docker / Docker Compose。安装后默认：**PostgreSQL**、**自签 HTTPS**、**密钥落盘**、反代下 **Secure Cookie**。
 
 ```bash
 # 1) 解压候选包到新目录（勿覆盖已有安装）

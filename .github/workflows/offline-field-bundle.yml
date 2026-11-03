@@ -1,0 +1,62 @@
+name: Offline field bundle
+on:
+  workflow_dispatch:
+    inputs:
+      with_debs:
+        description: 'Also download Ubuntu 22.04 .deb packages into the bundle'
+        type: boolean
+        default: true
+permissions:
+  contents: read
+jobs:
+  pack-offline:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.23.2'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Backend package
+        working-directory: server
+        run: mvn --batch-mode -DskipTests package
+      - name: Build administration UI
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+      - name: Pack candidate zip
+        run: |
+          mkdir -p dist
+          python3 scripts/pack-admin-release.py --output "$GITHUB_WORKSPACE/dist/kaiwu-praxis-admin-candidate.zip"
+      - name: Pack offline field bundle
+        env:
+          DOCKER_PLATFORM: linux/amd64
+          WITH_DEBS: ${{ inputs.with_debs && '1' || '0' }}
+        run: |
+          chmod +x scripts/pack-offline-field-bundle.sh deploy/offline/install-on-customer.sh
+          sudo apt-get update
+          # debs download needs apt-get download without root write to cwd — pack script uses apt-get download as user
+          ./scripts/pack-offline-field-bundle.sh "$GITHUB_WORKSPACE/dist/praxis-offline-field.tgz"
+          python3 - <<'PY'
+          import hashlib, pathlib
+          path = pathlib.Path('dist/praxis-offline-field.tgz')
+          digest = hashlib.sha256(path.read_bytes()).hexdigest()
+          pathlib.Path('dist/praxis-offline-field.tgz.sha256').write_text(f'{digest}  {path.name}\n')
+          print(f'offline bundle sha256={digest} bytes={path.stat().st_size}')
+          PY
+      - name: Upload offline field bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: praxis-offline-field
+          path: |
+            dist/praxis-offline-field.tgz
+            dist/praxis-offline-field.tgz.sha256
+          if-no-files-found: error
+          retention-days: 14
