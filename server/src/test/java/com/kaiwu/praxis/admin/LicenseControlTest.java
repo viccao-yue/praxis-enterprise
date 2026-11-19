@@ -123,7 +123,8 @@ class LicenseControlTest {
         upload(owner, body, 200);
         String payload = json.readTree(body).path("payload").asText();
         String signature = json.readTree(body).path("signature").asText();
-        String tampered = json.writeValueAsString(Map.of("v", 1, "payload", payload, "signature", "A" + signature.substring(1)));
+        char replacement = signature.charAt(0) == 'A' ? 'B' : 'A';
+        String tampered = json.writeValueAsString(Map.of("v", 1, "payload", payload, "signature", replacement + signature.substring(1)));
         JsonNode denied = upload(owner, tampered, 400);
         assertEquals(LicenseTexts.BAD_SIGNATURE, denied.path("detail").asText());
         assertEquals(payload, db.queryForObject("select payload from deployment_licenses where installation_id=?", String.class, installation(owner)));
