@@ -2,13 +2,18 @@
 """Field one-shot: generate secrets once, emit migrate SQL, init DB, start delivery stack."""
 from __future__ import annotations
 
+import argparse
 import base64
+import ipaddress
+import json
 import os
 import pathlib
+import re
 import secrets
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -20,6 +25,7 @@ MIGRATE_SQL = CONFIG / "schema-migrate.sql"
 TLS_DIR = CONFIG / "tls"
 TLS_CERT = TLS_DIR / "cert.pem"
 TLS_KEY = TLS_DIR / "key.pem"
+CONNECTION_FILE = CONFIG / "enterprise-connection.praxis"
 COMPOSE = ROOT / "deploy" / "docker-compose.delivery.yml"
 JAR = ROOT / "server" / "kaiwu-praxis-admin-server.jar"
 WEB = ROOT / "web" / "dist" / "index.html"
@@ -110,7 +116,23 @@ def emit_migrate_sql() -> None:
     print(f"wrote {MIGRATE_SQL} ({len(out)} bytes)")
 
 
-def detect_lan_ipv4() -> list[str]:
+def connection_host(value: str) -> str:
+    host = value.strip()
+    if host.startswith("[") and host.endswith("]") and ":" in host:
+        host = host[1:-1]
+    try:
+        if "%" not in host:
+            return str(ipaddress.ip_address(host))
+    except ValueError:
+        pass
+    labels = host.lower().split(".")
+    if (len(host) <= 253 and not re.fullmatch(r"(?:[0-9]+|0x[0-9a-f]*)", labels[-1])
+            and all(re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in labels)):
+        return ".".join(labels)
+    raise SystemExit("请提供员工实际访问的 IP 或 DNS 主机名，不带协议、端口或路径。")
+
+
+def detect_lan_ipv4(extra: str = "") -> list[str]:
     found: set[str] = set()
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
@@ -127,24 +149,25 @@ def detect_lan_ipv4() -> list[str]:
                 found.add(ip)
     except OSError:
         pass
-    extra = os.environ.get("DELIVERY_HOST", "").strip()
     if extra and extra not in ("localhost", "127.0.0.1"):
         found.add(extra)
     return sorted(found)
 
 
-def ensure_self_signed_tls() -> None:
+def ensure_self_signed_tls(host: str = "") -> None:
     """Self-signed cert with localhost + detected LAN IPs (and optional DELIVERY_HOST)."""
     if TLS_CERT.is_file() and TLS_KEY.is_file():
         print(f"reusing existing TLS material in {TLS_DIR}")
         return
+    if TLS_CERT.exists() or TLS_KEY.exists():
+        raise SystemExit(f"TLS 证书或私钥不完整，请先从备份恢复：{TLS_DIR}")
     TLS_DIR.mkdir(mode=0o700, exist_ok=True)
     san = ["DNS:localhost", "DNS:kaiwu-praxis-admin", "IP:127.0.0.1"]
-    for host in detect_lan_ipv4():
-        if host.replace(".", "").isdigit() or host.count(":") >= 2:
-            entry = f"IP:{host}"
-        else:
-            entry = f"DNS:{host}"
+    for name in detect_lan_ipv4(host):
+        try:
+            entry = f"IP:{ipaddress.ip_address(name)}"
+        except ValueError:
+            entry = f"DNS:{name}"
         if entry not in san:
             san.append(entry)
     san_arg = "subjectAltName=" + ",".join(san)
@@ -174,6 +197,46 @@ def ensure_self_signed_tls() -> None:
     TLS_KEY.chmod(0o600)
     TLS_CERT.chmod(0o644)
     print(f"wrote self-signed TLS cert ({san_arg})")
+
+
+def connection_payload(host: str) -> dict[str, object]:
+    if not TLS_CERT.is_file():
+        raise SystemExit(f"找不到部署证书：{TLS_CERT}。请先安装后台。")
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        ip = None
+    verify_option, san_type = ("-verify_ip", "IP Address:") if ip else ("-verify_hostname", "DNS:")
+    try:
+        san = subprocess.run(
+            ["openssl", "x509", "-in", str(TLS_CERT), "-noout", "-ext", "subjectAltName"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+        verified = subprocess.run(
+            ["openssl", "verify", "-CAfile", str(TLS_CERT), "-purpose", "sslserver",
+             verify_option, host, str(TLS_CERT)], capture_output=True, text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise SystemExit(f"无法读取或验证部署证书：{TLS_CERT}") from exc
+    if san_type not in san or verified.returncode:
+        raise SystemExit(f"无法为 {host} 导出连接文件：证书未包含此地址、已过期或无效。"
+                         "请检查部署证书或使用当前证书覆盖的地址。")
+    authority = f"[{host}]" if ip and ip.version == 6 else host
+    return {"version": 1, "backendUrl": f"https://{authority}",
+            "serverCertificatePem": TLS_CERT.read_text(encoding="ascii")}
+
+
+def write_connection_file(payload: dict[str, object]) -> None:
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=CONFIG, delete=False) as out:
+        temporary = pathlib.Path(out.name)
+        try:
+            json.dump(payload, out, indent=2)
+            out.write("\n")
+            out.close()
+            temporary.replace(CONNECTION_FILE)
+        finally:
+            temporary.unlink(missing_ok=True)
+    print(f"桌面端连接文件：{CONNECTION_FILE}（通过可信渠道发给员工）")
 
 
 def compose_env() -> dict[str, str]:
@@ -247,6 +310,23 @@ def compose_up_stack() -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--export-connection", action="store_true", help="仅导出连接文件，不启动服务")
+    parser.add_argument("--host", help="用于仅导出的 IP 或 DNS 主机名；也可使用 DELIVERY_HOST")
+    parser.add_argument("--skip-connection-export", action="store_true", help=argparse.SUPPRESS)
+    args = parser.parse_args()
+    if args.host is not None and not args.export_connection:
+        parser.error("--host requires --export-connection")
+    if args.export_connection and args.skip_connection_export:
+        parser.error("conflicting export options")
+    host_value = (args.host if args.host is not None else os.environ.get("DELIVERY_HOST", "")).strip()
+    if args.export_connection and not host_value:
+        parser.error("--export-connection requires --host or DELIVERY_HOST")
+    host = connection_host(host_value) if host_value else ""
+    if args.export_connection:
+        write_connection_file(connection_payload(host))
+        return 0
+
     if not COMPOSE.is_file():
         raise SystemExit(f"missing {COMPOSE}")
     if not JAR.is_file():
@@ -262,9 +342,12 @@ def main() -> int:
             raise SystemExit(f"Docker is required ({' '.join(cmd)}): {exc}") from exc
 
     write_secrets_if_needed()
-    ensure_self_signed_tls()
+    ensure_self_signed_tls(host)
+    payload = connection_payload(host) if host and not args.skip_connection_export else None
     emit_migrate_sql()
     compose_up_stack()
+    if payload is not None:
+        write_connection_file(payload)
     print()
     print("Delivery stack started.")
     print("  URL:  https://<this-host>/  (accept the self-signed certificate warning)")

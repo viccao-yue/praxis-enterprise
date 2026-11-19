@@ -16,6 +16,18 @@ sudo -E DELIVERY_HOST=192.168.x.x bash install-on-customer.sh
 
 浏览器打开 `https://192.168.x.x/`。本地打包：`./scripts/pack-offline-field-bundle.sh /tmp/praxis-offline-field.tgz`（需能拉镜像；Apple Silicon 用 `DOCKER_PLATFORM=linux/amd64`）。
 
+### 员工桌面端如何连接
+
+指定 `DELIVERY_HOST` 的安装会在 `config/enterprise-connection.praxis` 导出连接文件。管理员从服务器取出这个文件，通过可信渠道发给员工，不分发 `config/tls/key.pem` 或 `config/secrets.env`。员工在新版桌面端选「连接企业 → 导入企业连接文件」，确认地址，再输入原账号密码。无需安装系统证书。
+
+旧安装、未显式指定地址的安装，或管理员换证后，可在安装目录单独导出：
+
+```bash
+python3 scripts/delivery-bootstrap.py --export-connection --host 192.168.1.20
+```
+
+此命令使用已有证书，不重启服务或迁移数据库。地址须已包含在证书里；给老客户优先沿用原地址，避免桌面端切到另一个本地企业工作区。证书更换后发新文件，员工确认并通过验证后，才会替换原连接配置。浏览器管理控制台和单独配置的企业模型 API 不使用该连接文件。
+
 ## 主路径 B：已有 Docker 的在线/半在线环境
 
 现场已有 Docker / Docker Compose。安装后默认：**PostgreSQL**、**自签 HTTPS**、**密钥落盘**、反代下 **Secure Cookie**。
