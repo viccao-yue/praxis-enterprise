@@ -3,6 +3,7 @@ package com.kaiwu.praxis.admin;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
@@ -32,6 +33,8 @@ public class AuthService {
     private final DatabaseDialect dialect;
     private final BCryptPasswordEncoder passwords = new BCryptPasswordEncoder(12);
     private final SecureRandom random = new SecureRandom();
+    private static final long SESSION_HOURS = 12;
+    private static final long DESKTOP_LIMIT_HOURS = 72;
 
     public AuthService(JdbcTemplate db, LicenseService licenses, DatabaseDialect dialect) {
         this.db = db;
@@ -45,7 +48,8 @@ public class AuthService {
         /** Owner or admin signed in through the enterprise console, not the desktop. */
         public boolean consoleOperator() { return console && admin(); }
     }
-    public record Login(String token, Actor member) {}
+    public record Login(String token, Actor member, Long expiresAt, Long renewalLimit) {}
+    public record Renewal(long expiresAt) {}
 
     @Bean
     ApplicationRunner bootstrap(
@@ -59,6 +63,7 @@ public class AuthService {
             } catch (DataAccessException ignored) {
                 // Existing databases already have the console/desktop channel column.
             }
+            ensureDesktopRenewalStorage();
             Long count = db.queryForObject("select count(*) from organizations", Long.class);
             if (count != null && count > 0) return;
             // Allow current delivery default Sun55kong! (10 chars); keep a modest floor.
@@ -72,6 +77,23 @@ public class AuthService {
                     adminId, orgId, email.trim().toLowerCase(), "管理员", "OWNER", passwords.encode(password), requirePasswordChange);
             licenses.ensureInstallation(orgId);
         };
+    }
+
+    private void ensureDesktopRenewalStorage() {
+        var probe = "select desktop_renewal_limit from auth_sessions where 1=0";
+        try {
+            db.queryForList(probe);
+        } catch (DataAccessException missingColumn) {
+            if (dialect.postgres()) {
+                throw new IllegalStateException("Apply PostgreSQL migration V010 before starting Admin", missingColumn);
+            }
+            try {
+                db.execute("alter table auth_sessions add column desktop_renewal_limit timestamp null");
+            } catch (DataAccessException migrationFailure) {
+                try { db.queryForList(probe); }
+                catch (DataAccessException unavailable) { throw migrationFailure; }
+            }
+        }
     }
 
     @Transactional(noRollbackFor = ResponseStatusException.class)
@@ -106,11 +128,45 @@ public class AuthService {
         byte[] bytes = new byte[32];
         random.nextBytes(bytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        db.update("insert into auth_sessions(token_hash,member_id,expires_at,channel) values (?,?,?,?)",
-                sha256(token), u.get("id"), java.sql.Timestamp.from(Instant.now().plus(12, ChronoUnit.HOURS)), console ? "console" : "desktop");
+        // MySQL delivery schemas store timestamps with second precision.
+        var now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        var expires = now.plus(SESSION_HOURS, ChronoUnit.HOURS);
+        var limit = console ? null : now.plus(DESKTOP_LIMIT_HOURS, ChronoUnit.HOURS);
+        db.update("insert into auth_sessions(token_hash,member_id,expires_at,channel,desktop_renewal_limit) values (?,?,?,?,?)",
+                sha256(token), u.get("id"), Timestamp.from(expires), console ? "console" : "desktop", limit == null ? null : Timestamp.from(limit));
         return new Login(token, new Actor((String) u.get("id"), (String) u.get("org"),
                 (String) u.get("email"), (String) u.get("name"), (String) u.get("role"),
-                (Boolean) u.get("change"), console));
+                (Boolean) u.get("change"), console), console ? null : expires.toEpochMilli(), limit == null ? null : limit.toEpochMilli());
+    }
+
+    @Transactional
+    public Renewal renewDesktop(String bearer) {
+        var actor = actor(bearer);
+        requireReady(actor);
+        if (actor.console()) throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Desktop session required");
+        var now = Instant.now();
+        var key = sha256(bearer.substring(7));
+        var current = Timestamp.from(now);
+        var next = Timestamp.from(now.truncatedTo(ChronoUnit.SECONDS).plus(SESSION_HOURS, ChronoUnit.HOURS));
+        // Never recreate a removed session or extend an expired one. The bounded
+        // update also handles simultaneous renewals without moving expiry backwards.
+        db.update("""
+                update auth_sessions set expires_at=case when desktop_renewal_limit<? then desktop_renewal_limit else ? end
+                where token_hash=? and member_id=? and channel='desktop'
+                  and expires_at>? and expires_at<=? and desktop_renewal_limit>expires_at
+                  and exists (select 1 from members m where m.id=? and m.active=true
+                    and m.must_change_password=false and m.organization_id=? and m.role=?)
+                """, next, next, key, actor.id(), current, Timestamp.from(now.plus(4, ChronoUnit.HOURS)),
+                actor.id(), actor.organizationId(), actor.role());
+        var result = db.query("""
+                select s.expires_at from auth_sessions s join members m on m.id=s.member_id
+                where s.token_hash=? and s.member_id=? and s.channel='desktop' and s.expires_at>?
+                  and s.desktop_renewal_limit is not null and m.active=true and m.must_change_password=false
+                  and m.organization_id=? and m.role=?
+                """, (rs, i) -> rs.getTimestamp(1).toInstant().toEpochMilli(),
+                key, actor.id(), current, actor.organizationId(), actor.role());
+        if (result.size() != 1) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Desktop session not renewable");
+        return new Renewal(result.get(0));
     }
 
     public Actor actor(String bearer) {

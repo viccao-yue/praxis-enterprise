@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 public class DatabaseDialect {
  private final boolean sqlite;private final String url;
  public DatabaseDialect(@Value("${spring.datasource.url}") String url){this.url=url;sqlite=url.startsWith("jdbc:sqlite:");}
+ public boolean postgres(){return url.startsWith("jdbc:postgresql:");}
  public String lock(String sql){return sqlite?sql:sql+" for update";}
  public String initializeTransportRecord(){
   String insert="insert into server_transport_records(record_key,revision,encrypted_value) values (?,0,'')";

@@ -30,6 +30,13 @@ public class AuthController {
         return auth.login(credentials.email(), credentials.password());
     }
 
+    @PostMapping("/desktop/renew")
+    public AuthService.Renewal renewDesktop(@RequestHeader(value="Authorization", required=false) String bearer,
+                                            HttpServletResponse response) {
+        response.setHeader("Cache-Control", "no-store");
+        return auth.renewDesktop(bearer);
+    }
+
     @PostMapping("/browser-login")
     public AuthService.Actor browserLogin(@Valid @RequestBody Credentials credentials,
                                           HttpServletRequest request,
