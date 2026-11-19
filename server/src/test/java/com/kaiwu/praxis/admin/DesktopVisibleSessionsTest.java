@@ -29,6 +29,35 @@ class DesktopVisibleSessionsTest {
  JsonNode call(MockHttpServletRequestBuilder request,int code)throws Exception{var response=mvc.perform(request).andReturn().getResponse();assertEquals(code,response.getStatus());return response.getContentAsString().isBlank()?json.nullNode():json.readTree(response.getContentAsString());}
  JsonNode ingest(Account account,ObjectNode input,int code)throws Exception{return call(post("/api/member/visible-sessions").header("Authorization",account.bearer()).contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsBytes(input)),code);}
  MockHttpServletRequestBuilder status(Account a,String id,String device){return get("/api/member/visible-sessions").header("Authorization",a.bearer()).param("sessionId",id).param("deviceId",device);}
+ @Test void desktopRenewalCrossesTheOldDeadlineAndNeverRevivesRevokedOrExpiredSessions() throws Exception {
+  var owner=owner();
+  var desktop=member(owner.org(),true);
+  var renew=post("/api/auth/desktop/renew").header("Authorization",desktop.bearer());
+  var now=java.time.Instant.now();
+  var oldDeadline=now.plusSeconds(15);
+  var ceiling=now.plusSeconds(3600);
+  db.update("update auth_sessions set expires_at=?, desktop_renewal_limit=? where member_id=?",
+    java.sql.Timestamp.from(oldDeadline),java.sql.Timestamp.from(ceiling),desktop.id());
+  var refreshed=call(renew,200).path("expiresAt").asLong();
+  assertTrue(refreshed>oldDeadline.toEpochMilli());
+  assertEquals(ceiling.toEpochMilli(),refreshed,1);
+  assertEquals(refreshed,call(renew,200).path("expiresAt").asLong());
+  call(get("/api/auth/me").header("Authorization",desktop.bearer()),200);
+  auth.logout(desktop.bearer());call(renew,401);
+
+  var expired=member(owner.org(),true);
+  db.update("update auth_sessions set expires_at=? where member_id=?",java.sql.Timestamp.from(now.minusSeconds(1)),expired.id());
+  call(post("/api/auth/desktop/renew").header("Authorization",expired.bearer()),401);
+  var disabled=member(owner.org(),true);
+  db.update("update members set active=false where id=?",disabled.id());
+  call(post("/api/auth/desktop/renew").header("Authorization",disabled.bearer()),401);
+  var previousVersion=member(owner.org(),true);
+  db.update("update auth_sessions set desktop_renewal_limit=null where member_id=?",previousVersion.id());
+  call(post("/api/auth/desktop/renew").header("Authorization",previousVersion.bearer()),401);
+  var console=auth.login("desktop-owner@example.test","DesktopFixturePassword123!","console");
+  assertNull(console.renewalLimit());
+  call(post("/api/auth/desktop/renew").header("Authorization","Bearer "+console.token()),403);
+ }
  @Test void explicitMemberBearerFreshAuthorizationAndNoSelfReportedIdentity()throws Exception{
   var o=owner();var a=member(o.org(),true);String id=session();var body=snapshot(id,"device-A",1,1);
   call(post("/api/member/visible-sessions").contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsBytes(body)).header("X-WorkDSH-Service-Key","desktop-service-fixture-000000000000"),401);
