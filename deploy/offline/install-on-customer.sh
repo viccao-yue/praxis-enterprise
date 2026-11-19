@@ -79,7 +79,8 @@ fi
 docker version
 docker compose version
 
-HOST="${DELIVERY_HOST:-}"
+EXPLICIT_HOST="${DELIVERY_HOST:-}"
+HOST="$EXPLICIT_HOST"
 if [[ -z "$HOST" ]]; then
   HOST="$(hostname -I 2>/dev/null | awk '{print $1}')"
 fi
@@ -117,12 +118,20 @@ python3 "$INSTALL_PY" "$CANDIDATE" "$DEST"
 echo "==> 一键启动（PostgreSQL + 管理端 + 自签 HTTPS）"
 export DELIVERY_HOST="$HOST"
 cd "$DEST"
-python3 scripts/delivery-bootstrap.py
+if [[ -n "$EXPLICIT_HOST" ]]; then
+  python3 scripts/delivery-bootstrap.py
+else
+  python3 scripts/delivery-bootstrap.py --skip-connection-export
+  echo "未指定员工访问地址，未导出连接文件。确认地址后运行："
+  echo "  python3 scripts/delivery-bootstrap.py --export-connection --host $HOST"
+fi
 
 echo
 echo "========================================"
 echo "安装完成。"
-echo "浏览器打开:  https://$HOST/"
+URL_HOST="$HOST"
+if [[ "$URL_HOST" == *:* && "$URL_HOST" != \[*\] ]]; then URL_HOST="[$URL_HOST]"; fi
+echo "浏览器打开:  https://$URL_HOST/"
 echo "证书警告点「继续访问」。"
 echo "默认账号见:  $DEST/config/BOOTSTRAP-ONCE.txt"
 echo "务必备份:    $DEST/config/secrets.env  与  $DEST/config/tls/"

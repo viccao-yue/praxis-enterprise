@@ -80,6 +80,10 @@ cat > "$BUNDLE/先读我.txt" <<'EOF'
 3) 浏览器打开 https://10.10.10.11/  （接受自签证书警告）
    账号见 /opt/kaiwu-praxis-admin/config/BOOTSTRAP-ONCE.txt
 
+4) 通过可信渠道把 config/enterprise-connection.praxis 发给员工。
+   员工在新版桌面端选择「导入企业连接文件」，确认后用原账号密码登录。
+   不要分发 config/tls/key.pem 或 config/secrets.env。
+
 系统要求：Ubuntu Server 22.04 x86_64，自带 python3 和 openssl（Server 默认有）。
 本包自带 Docker 静态程序和镜像，脚本会自己安装并启动 Docker。
 

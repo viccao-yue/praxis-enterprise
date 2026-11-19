@@ -31,6 +31,8 @@ jobs:
           npm run build
       - name: Verify release archive boundary
         run: python3 scripts/test-admin-release.py
+      - name: Test offline enterprise connection export
+        run: python3 scripts/test-delivery-connection.py
       - name: Pack admin candidate zip
         run: |
           mkdir -p dist
